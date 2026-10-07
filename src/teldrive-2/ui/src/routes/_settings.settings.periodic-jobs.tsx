@@ -537,7 +537,7 @@ function PeriodicJobEditor({
                   variant={cronExpression === preset.value ? "primary" : "tertiary"}
                   onPress={() => form.setFieldValue("cronExpression", preset.value)}
                 >
-                  {preset.label}
+                  {t(preset.label)}
                 </Button>
               ))}
             </div>
@@ -672,7 +672,7 @@ function parseArguments(value: string): Record<string, unknown> {
 
 function describeCron(expression: string): string {
   const preset = CRON_PRESETS.find((item) => item.value === expression.trim());
-  if (preset) return `${preset.label} in the selected timezone.`;
+  if (preset) return t("{{label}} in the selected timezone.", { label: preset.label });
   if (!expression.trim()) return t("Enter a cron expression.");
   return `Custom schedule: ${expression.trim()}`;
 }

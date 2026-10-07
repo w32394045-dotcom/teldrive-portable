@@ -526,7 +526,7 @@ function TaskStatusSelect({
       <Select.Trigger className="h-8 min-h-8 py-1.5">
         <Select.Value>
           <div className="flex min-w-0 items-center justify-between gap-3">
-            <span className="truncate">{selected.label}</span>
+            <span className="truncate">{t(selected.label)}</span>
             <span className="text-xs tabular-nums text-muted">{counts?.[selected.key] ?? 0}</span>
           </div>
         </Select.Value>
@@ -535,7 +535,7 @@ function TaskStatusSelect({
       <Select.Popover>
         <ListBox>
           {STATUS_TABS.map((item) => (
-            <ListBox.Item key={item.key} id={item.key} textValue={item.label}>
+            <ListBox.Item key={item.key} id={item.key} textValue={t(item.label)}>
               <div className="flex w-full items-center justify-between gap-4">
                 <TaskStatusChip status={item.key} />
                 <span className="text-xs font-medium tabular-nums text-muted">

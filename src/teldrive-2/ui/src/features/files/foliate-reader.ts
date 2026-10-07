@@ -92,7 +92,8 @@ export function closePublication(element: FoliateViewElement) {
 }
 
 function readerFont(font: string) {
-  if (font === "serif") return t("Iowan Old Style, Charter, \"Bitstream Charter\", Georgia, serif");
-  if (font === "sans") return t("Avenir Next, Avenir, \"Segoe UI\", sans-serif");
+  // CSS font stacks stay untranslated on purpose.
+  if (font === "serif") return 'Iowan Old Style, Charter, "Bitstream Charter", Georgia, serif';
+  if (font === "sans") return 'Avenir Next, Avenir, "Segoe UI", sans-serif';
   return "inherit";
 }

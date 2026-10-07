@@ -5,6 +5,7 @@ import MoonIcon from "~icons/gravity-ui/moon";
 import SunIcon from "~icons/gravity-ui/sun";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
 import { t } from "@/i18n";
+import { LocaleSelect } from "@/i18n/LocaleSelect";
 
 export const Route = createFileRoute("/_settings/settings/appearance")({
   component: AppearanceSettings,
@@ -39,6 +40,17 @@ function AppearanceSettings() {
               {t("Dark")}
             </Button>
           </div>
+        </SettingsRow>
+      </SettingsSection>
+      <SettingsSection
+        title={t("Language")}
+        description={t("Pick the interface language. The choice is stored in this browser.")}
+      >
+        <SettingsRow
+          label={t("Language")}
+          description={t("Simplified Chinese, Traditional Chinese, Japanese and Korean are available.")}
+        >
+          <LocaleSelect />
         </SettingsRow>
       </SettingsSection>
     </div>

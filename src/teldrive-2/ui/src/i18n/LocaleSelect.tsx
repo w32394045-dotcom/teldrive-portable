@@ -1,5 +1,5 @@
 import { cn } from "@heroui/react";
-import { LOCALES, type Locale, setLocale, useLocale } from "@/i18n";
+import { LOCALES, type Locale, setLocale, t, useLocale } from "@/i18n";
 
 /**
  * Language picker. Uses a native <select> so it works identically on the login
@@ -9,7 +9,7 @@ export function LocaleSelect({ className }: { className?: string }) {
   const locale = useLocale();
   return (
     <select
-      aria-label="Language"
+      aria-label={t("Language")}
       value={locale}
       onChange={(event) => setLocale(event.target.value as Locale)}
       className={cn(

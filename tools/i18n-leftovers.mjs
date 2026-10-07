@@ -42,8 +42,11 @@ const PRODUCT_NAMES = [
 /** Tailwind-ish class strings are not prose. */
 function looksLikeClasses(value) {
   if (/[A-Z]/.test(value)) return false;
-  if (!/[-:/[\]()%#.]/.test(value)) return false;
-  return /^[a-z0-9:/[\]()%#._\s-]+$/.test(value);
+  const tokens = value.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return false;
+  // A plain lowercase English word means this is prose, not a class list.
+  if (tokens.some((token) => /^[a-z]{4,}$/.test(token))) return false;
+  return tokens.every((token) => /^[a-z0-9:[\]()/.%#_-]+$/.test(token));
 }
 
 /** Pure numbers/units/punctuation carry no language. */

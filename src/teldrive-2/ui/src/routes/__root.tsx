@@ -131,7 +131,7 @@ function Sidebar({
             collapsed && !mobile ? "ml-0 max-w-0 opacity-0" : "ml-3 max-w-52 opacity-100",
           )}
         >
-          {item.label}
+          {t(item.label)}
         </span>
       </Link>
     );
@@ -317,7 +317,7 @@ function TopBar({
       </Button>
 
       <div className="hidden min-w-0 flex-1 md:block">
-        <p className="truncate text-sm font-semibold sm:text-base">{title}</p>
+        <p className="truncate text-sm font-semibold sm:text-base">{t(title)}</p>
       </div>
 
       <search aria-label={t("Search drive")} className="flex min-w-0 flex-1 items-center md:max-w-md">

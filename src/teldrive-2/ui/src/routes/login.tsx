@@ -22,6 +22,7 @@ import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
 import { currentUserQueryOptions } from "@/auth/queries";
 import { t } from "@/i18n";
+import { LocaleSelect } from "@/i18n/LocaleSelect";
 
 type Step = "phone" | "code" | "password";
 type Flow = {
@@ -168,6 +169,9 @@ function LoginPage() {
 
   return (
     <main className="grid min-h-dvh bg-background text-foreground lg:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
+      <div className="pointer-events-none fixed right-4 top-4 z-10">
+        <LocaleSelect className="pointer-events-auto" />
+      </div>
       <section className="hidden border-r border-border bg-sidebar/70 p-12 lg:flex lg:flex-col lg:justify-between">
         <div className="flex size-11 items-center justify-center rounded-xl bg-accent font-semibold text-accent-foreground">
           {t("TD")}

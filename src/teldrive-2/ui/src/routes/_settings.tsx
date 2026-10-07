@@ -93,7 +93,7 @@ function SettingsLayout() {
         <div className="mb-5 flex items-center justify-between border-b border-border pb-4 lg:hidden">
           <div>
             <Typography type="h2" className="text-base font-semibold">
-              {activeLabel ?? "Settings"}
+              {t(activeLabel ?? "Settings")}
             </Typography>
             <Typography.Paragraph className="text-xs text-muted">
               {t("Teldrive settings")}
@@ -160,7 +160,7 @@ function SettingsNavigation({
         <div key={group.label} className="flex flex-col gap-1.5">
           {groupIndex > 0 ? <Separator className="mb-3" /> : null}
           <p className="px-2 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted">
-            {group.label}
+            {t(group.label)}
           </p>
           {group.items.map((item) => {
             const active = currentPath === item.path;
@@ -172,7 +172,7 @@ function SettingsNavigation({
                 className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors ${active ? "bg-accent/10 text-accent" : "text-muted hover:bg-default/30 hover:text-foreground"}`}
               >
                 <item.icon className="size-4 shrink-0" />
-                <span>{item.label}</span>
+                <span>{t(item.label)}</span>
               </Link>
             );
           })}

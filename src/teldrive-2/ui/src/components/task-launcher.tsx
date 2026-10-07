@@ -138,10 +138,10 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                 <Select.Popover>
                   <ListBox>
                     {GROUPS.flatMap((group) => group.items).map((item) => (
-                      <ListBox.Item key={item.key} id={item.key} textValue={item.label}>
+                      <ListBox.Item key={item.key} id={item.key} textValue={t(item.label)}>
                         <div className="min-w-0">
-                          <div className="text-sm font-medium">{item.label}</div>
-                          <div className="truncate text-xs text-muted">{item.description}</div>
+                          <div className="text-sm font-medium">{t(item.label)}</div>
+                          <div className="truncate text-xs text-muted">{t(item.description)}</div>
                         </div>
                       </ListBox.Item>
                     ))}
@@ -158,7 +158,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                 {GROUPS.map((group) => (
                   <div key={group.label} className="mb-5 last:mb-0">
                     <div className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-                      {group.label}
+                      {t(group.label)}
                     </div>
                     <div className="grid gap-0.5">
                       {group.items.map((item) => {
@@ -177,7 +177,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                             }`}
                             onPress={() => chooseTask(item.key)}
                           >
-                            {item.label}
+                            {t(item.label)}
                           </Button>
                         );
                       })}
@@ -190,10 +190,10 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                 <div className="grid gap-5">
                   <div>
                     <Typography type="h3" className="text-base font-semibold">
-                      {selected.label}
+                      {t(selected.label)}
                     </Typography>
                     <Typography.Paragraph className="mt-1 text-sm text-muted">
-                      {selected.description}
+                      {t(selected.description)}
                     </Typography.Paragraph>
                   </div>
 
