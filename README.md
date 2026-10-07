@@ -67,4 +67,9 @@ python tools/make_zip.py   dist/teldrive-2-win64 dist/teldrive-2-win64.zip
 
 ## 许可
 
-上游 teldrive 的许可同样适用于 `src/teldrive-2/`。打包脚本与补丁部分见仓库作者。
+`src/teldrive-2/` 是 [tgdrive/teldrive](https://github.com/tgdrive/teldrive) 的副本，
+遵循上游的 **MIT License**（见 [LICENSE](LICENSE)，Copyright (c) 2024 divyam234）。
+本仓库新增的打包脚本（`tools/`）与 i18n 补丁同样以 MIT 发布。
+
+> `tools/` 里的脚本是本机开发与校验用的，默认按仓库位置推算目录；
+> 个别脚本（`verify-*.mjs` / `repro-*.mjs`）仍需按你的环境调整 Chrome 可执行文件路径。
