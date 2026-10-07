@@ -34,6 +34,10 @@ if not exist "%ROOT%teldrive.exe" ( echo [错误] 找不到 teldrive.exe & goto 
 if not exist "%PGBIN%\postgres.exe" ( echo [错误] 找不到 pgsql\bin\postgres.exe & goto :fail )
 if not exist "%ROOT%config.toml" ( echo [错误] 找不到 config.toml & goto :fail )
 
+rem 公开发布版用占位符密钥，首次启动在这里生成随机密钥
+call "%~dp0_init-keys.bat"
+if errorlevel 1 goto :fail
+
 tasklist /fi "imagename eq teldrive.exe" 2>nul | find /i "teldrive.exe" >nul
 if not errorlevel 1 (
     echo [提示] Teldrive 已经在运行，正在打开浏览器...
@@ -131,6 +135,25 @@ if errorlevel 1 (
     exit /b 0
 )
 start "" "http://127.0.0.1:%PORT%"
+exit /b 0
+"""
+
+INIT_KEYS_BAT = r"""@echo off
+setlocal EnableExtensions
+rem 公开发布版：config.toml 里是占位符，首次启动时在这里生成随机密钥
+findstr /C:"__SIGNING_KEY__" "%~dp0config.toml" >nul 2>&1
+if errorlevel 1 exit /b 0
+echo       首次运行：生成随机 signing-key / data-key ...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $rng=[System.Security.Cryptography.RandomNumberGenerator]::Create(); $b=New-Object byte[] 68; $rng.GetBytes($b); $sign=[Convert]::ToBase64String($b[0..35]); $data=[Convert]::ToBase64String($b[36..67]); $p='%~dp0config.toml'; $c=[System.IO.File]::ReadAllText($p); $c=$c.Replace('__SIGNING_KEY__',$sign).Replace('__DATA_KEY__',$data); [System.IO.File]::WriteAllText($p,$c,(New-Object System.Text.UTF8Encoding $false))"
+if errorlevel 1 (
+    echo [错误] 生成密钥失败：需要系统自带 PowerShell
+    exit /b 1
+)
+findstr /C:"__SIGNING_KEY__" "%~dp0config.toml" >nul 2>&1
+if not errorlevel 1 (
+    echo [错误] 生成密钥后占位符仍在，请检查 config.toml
+    exit /b 1
+)
 exit /b 0
 """
 
@@ -302,8 +325,19 @@ README = r"""===================================================================
 
 os.makedirs(BUNDLE, exist_ok=True)
 
+# `--public` produces a distributable bundle: config.toml carries placeholders
+# instead of this machine's real keys, and start.bat generates fresh random keys
+# on first run. Never ship a bundle that contains someone's live secrets.
+PUBLIC = "--public" in sys.argv
+
 cfg_path = os.path.join(BUNDLE, "config.toml")
-if os.path.exists(cfg_path):
+if PUBLIC:
+    signing_key = "__SIGNING_KEY__"
+    data_key = "__DATA_KEY__"
+    with open(cfg_path, "w", encoding="utf-8", newline="\r\n") as fh:
+        fh.write(CONFIG_TOML % {"signing_key": signing_key, "data_key": data_key})
+    print("config.toml written with placeholders (public build)")
+elif os.path.exists(cfg_path):
     print("config.toml already exists, keeping it")
 else:
     signing_key = secrets.token_urlsafe(36)          # >= 32 chars
@@ -330,5 +364,6 @@ def write_utf8_bom(name, text):
 write_gbk("start.bat", START_BAT)
 write_gbk("stop.bat", STOP_BAT)
 write_gbk("_open-browser.bat", OPEN_BROWSER_BAT)
+write_gbk("_init-keys.bat", INIT_KEYS_BAT)
 write_utf8_bom("使用说明.txt", README)
 print("bundle files ready:", BUNDLE)
