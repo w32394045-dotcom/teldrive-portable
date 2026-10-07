@@ -17,3 +17,23 @@ func enableUTF8Console() {
 	}
 	_, _, _ = setConsoleOutputCP.Call(uintptr(utf8CodePage))
 }
+
+// minimizeConsoleWindow hides the console when the app is started at login, so an
+// autostart does not throw a black window in the user's face every boot.
+func minimizeConsoleWindow() {
+	const swMinimize = 6
+	user32 := syscall.NewLazyDLL("user32.dll")
+	getConsoleWindow := syscall.NewLazyDLL("kernel32.dll").NewProc("GetConsoleWindow")
+	showWindow := user32.NewProc("ShowWindow")
+	if err := getConsoleWindow.Find(); err != nil {
+		return
+	}
+	if err := showWindow.Find(); err != nil {
+		return
+	}
+	handle, _, _ := getConsoleWindow.Call()
+	if handle == 0 {
+		return
+	}
+	_, _, _ = showWindow.Call(handle, uintptr(swMinimize))
+}

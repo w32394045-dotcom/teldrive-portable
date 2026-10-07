@@ -21,12 +21,15 @@ func TestWebDAVDispatchHandlesDAVMethodsAheadOfTheMux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newRequestSecurity: %v", err)
 	}
-	handler := &webDAVHandler{
+	handler := &extraAPI{
 		dav: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = io.WriteString(w, "dav:"+r.Method)
 		}),
 		settings: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = io.WriteString(w, "settings")
+		}),
+		system: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, "system:"+r.URL.Path)
 		}),
 	}
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,14 +60,27 @@ func TestWebDAVDispatchHandlesDAVMethodsAheadOfTheMux(t *testing.T) {
 		}
 	}
 
-	// Anything else keeps going to the mux, and a DAV-looking sibling path is not
-	// captured by the prefix check.
+	// The OS integration endpoints are intercepted too, for the methods the UI uses.
+	for _, path := range []string{autostartPath, mountPath} {
+		for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete} {
+			response := httptest.NewRecorder()
+			root.ServeHTTP(response, httptest.NewRequest(method, path, nil))
+			if got, want := response.Body.String(), "system:"+path; got != want {
+				t.Errorf("%s %s = %q, want %q", method, path, got, want)
+			}
+		}
+	}
+
+	// Anything else keeps going to the mux, and near-miss paths are not captured
+	// by the prefix checks.
 	for path, want := range map[string]string{
-		"/":              "mux:/",
-		"/files":         "mux:/files",
-		"/webdavfoo":     "mux:/webdavfoo",
-		"/webdav-config": "mux:/webdav-config",
-		"/api/v1/files":  "mux:/api/v1/files",
+		"/":                "mux:/",
+		"/files":           "mux:/files",
+		"/webdavfoo":       "mux:/webdavfoo",
+		"/webdav-config":   "mux:/webdav-config",
+		"/api/v1/files":    "mux:/api/v1/files",
+		"/api/systemfoo":   "mux:/api/systemfoo",
+		"/api/webdav-conf": "mux:/api/webdav-conf",
 	} {
 		response := httptest.NewRecorder()
 		root.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))

@@ -44,7 +44,12 @@ func newRootCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			enableUTF8Console()
 			out := cmd.OutOrStdout()
-			err := launchBundled(cmd.Context(), out)
+			quiet, _ := cmd.Flags().GetBool("autostart")
+			if quiet {
+				// Started by the Windows Run key: stay out of the way.
+				minimizeConsoleWindow()
+			}
+			err := launchBundled(cmd.Context(), out, quiet)
 			switch {
 			case errors.Is(err, errNotBundled):
 				writeLauncherHint(out, buildVersion())
@@ -60,6 +65,8 @@ func newRootCommand() *cobra.Command {
 		},
 	}
 	root.AddCommand(newRunCommand(), newCheckCommand(), newVersionCommand())
+	root.Flags().Bool("autostart", false,
+		"启动于登录时：最小化控制台窗口并且不打开浏览器（由开机自启项传入）")
 	return root
 }
 

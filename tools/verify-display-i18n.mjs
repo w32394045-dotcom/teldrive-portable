@@ -98,6 +98,12 @@ const EXPECTATIONS = {
       webdav: true,
     },
     {
+      route: "/settings/webdav", name: "automation section",
+      require: ["保持常驻", "开机自启动", "挂载为网络盘", "以管理员身份修复", "复制命令", "未挂载"],
+      forbidLines: ["Keep it running", "Start at login", "Mount as a drive", "Not mounted"],
+      webdav: true,
+    },
+    {
       route: "/trash", name: "trash kind badges",
       require: ["文件夹", "文件"],
       forbidLines: ["File", "Folder"],
@@ -186,6 +192,31 @@ for (const [locale, specs] of Object.entries(EXPECTATIONS)) {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ enabled, url: "http://127.0.0.1:8080/webdav" }),
+      });
+    });
+    // The OS integration endpoints are also part of the app API; the page needs
+    // them to render the automation section.
+    await page.route("**/api/system/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+      if (path.endsWith("/autostart")) {
+        return json({ supported: true, enabled: false, command: '"C:\\teldrive\\teldrive.exe" --autostart' });
+      }
+      return json({
+        supported: true,
+        mounted: false,
+        drive: "Z:",
+        url: "http://127.0.0.1:8080/webdav",
+        prerequisites: {
+          ready: false,
+          needsAdmin: true,
+          fixCommand: "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\WebClient' -Name 'Start' -Value 2",
+          items: [
+            { key: "webclient_service", ok: false, current: "手动", required: "自动", description: "server text" },
+            { key: "basic_auth_level", ok: false, current: "1", required: "2", description: "server text" },
+            { key: "file_size_limit", ok: false, current: "48 MB", required: ">= 1 GB", description: "server text" },
+          ],
+        },
       });
     });
     await page.addInitScript((value) => {

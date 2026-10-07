@@ -17,20 +17,28 @@ import (
 // database so enabling WebDAV needs no migration.
 const configFileName = "webdav.json"
 
-// ConfigStore owns the WebDAV toggle. It is read on the request path and written
-// by the settings API, so the write must apply immediately without a restart:
-// SetEnabled persists first and only then flips the in-memory value, which keeps
-// a failed write from reporting success.
+// ConfigStore owns the WebDAV toggle and the credentials used for the mappings
+// this server creates on the user's behalf. It is read on the request path and
+// written by the settings API, so a write must apply immediately without a
+// restart: the value is persisted first and only then swapped in memory, which
+// keeps a failed write from reporting success.
 type ConfigStore struct {
 	path   string
 	logger *slog.Logger
 
-	mu      sync.RWMutex
-	enabled bool
+	mu    sync.RWMutex
+	value configFile
 }
 
 type configFile struct {
 	Enabled bool `json:"enabled"`
+	// MountKeyID and MountKeySecret identify the API key the server generates and
+	// uses to map the DAV tree as a drive, so a re-mount does not need the user to
+	// paste credentials. The secret lives beside the database, never in the
+	// distributed bundle.
+	MountKeyID     string `json:"mountKeyId,omitempty"`
+	MountKeySecret string `json:"mountKeySecret,omitempty"`
+	MountDrive     string `json:"mountDrive,omitempty"`
 }
 
 // NewConfigStore returns a store backed by path. A missing file means disabled,
@@ -63,7 +71,7 @@ func (s *ConfigStore) Load() error {
 		return nil
 	}
 	s.mu.Lock()
-	s.enabled = parsed.Enabled
+	s.value = parsed
 	s.mu.Unlock()
 	return nil
 }
@@ -75,7 +83,7 @@ func (s *ConfigStore) Enabled() bool {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.enabled
+	return s.value.Enabled
 }
 
 // Path is the JSON file backing the toggle; it is reported in diagnostics.
@@ -88,17 +96,56 @@ func (s *ConfigStore) Path() string {
 
 // SetEnabled persists the toggle atomically and applies it to this process.
 func (s *ConfigStore) SetEnabled(enabled bool) error {
+	return s.update(func(value *configFile) { value.Enabled = enabled })
+}
+
+// MountCredentials returns the stored key id, secret and drive letter.
+func (s *ConfigStore) MountCredentials() (keyID, secret, drive string) {
+	if s == nil {
+		return "", "", ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.value.MountKeyID, s.value.MountKeySecret, s.value.MountDrive
+}
+
+// SetMountCredentials records a freshly generated key and the drive it maps.
+func (s *ConfigStore) SetMountCredentials(keyID, secret, drive string) error {
+	return s.update(func(value *configFile) {
+		value.MountKeyID = keyID
+		value.MountKeySecret = secret
+		value.MountDrive = drive
+	})
+}
+
+// ClearMountCredentials forgets a key that no longer works, so the next mount
+// generates a new one.
+func (s *ConfigStore) ClearMountCredentials() error {
+	return s.update(func(value *configFile) {
+		value.MountKeyID = ""
+		value.MountKeySecret = ""
+	})
+}
+
+// update mutates the record and persists the whole thing: writing only the
+// changed field would drop the others.
+func (s *ConfigStore) update(mutate func(*configFile)) error {
 	if s == nil {
 		return errors.New("webdav: config store is not configured")
 	}
 	if strings.TrimSpace(s.path) == "" {
 		return errors.New("webdav: config store path is empty")
 	}
-	if err := writeConfigFile(s.path, configFile{Enabled: enabled}); err != nil {
+	s.mu.Lock()
+	next := s.value
+	mutate(&next)
+	s.mu.Unlock()
+
+	if err := writeConfigFile(s.path, next); err != nil {
 		return err
 	}
 	s.mu.Lock()
-	s.enabled = enabled
+	s.value = next
 	s.mu.Unlock()
 	return nil
 }

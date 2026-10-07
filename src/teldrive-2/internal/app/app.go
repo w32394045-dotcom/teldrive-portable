@@ -223,12 +223,17 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	if err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
-	webDAV, err := newWebDAVHandler(webDAVConfig{
+	configStore, err := newConfigStore(dependencies.Logger)
+	if err != nil {
+		return nil, err
+	}
+	extras, err := newExtraAPI(extraAPIConfig{
 		catalogService: catalogService,
 		uploadService:  uploadService,
 		pipeline:       uploadPipeline,
 		downloader:     downloader,
 		authService:    authService,
+		configStore:    configStore,
 		httpAddress:    cfg.HTTP.Address,
 		logger:         dependencies.Logger,
 	})
@@ -236,10 +241,10 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		return nil, fmt.Errorf("configure webdav: %w", err)
 	}
 	routeApplication(mux, requestSecurity.middleware(browserCSRFMiddleware(sessionRenewalMiddleware(authService, httpServer))), webUI)
-	// The DAV surface is dispatched ahead of the mux (chi answers unknown HTTP
-	// methods with 405), and that dispatch carries the request-id and access-log
-	// middleware the mux would otherwise apply.
-	rootHandler := webDAV.wrap(mux, requestSecurity, dependencies.Logger)
+	// The DAV tree and the OS integration endpoints are dispatched ahead of the
+	// mux (chi answers unknown HTTP methods with 405), and that dispatch carries
+	// the request-id and access-log middleware the mux would otherwise apply.
+	rootHandler := extras.wrap(mux, requestSecurity, dependencies.Logger)
 	application := &App{
 		config:            cfg,
 		pool:              pool,

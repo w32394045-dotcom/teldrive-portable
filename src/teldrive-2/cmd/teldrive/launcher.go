@@ -28,7 +28,11 @@ var errNotBundled = errors.New("not a portable bundle")
 // launchBundled starts the whole portable distribution from teldrive.exe alone:
 // first-run keys, the bundled PostgreSQL, the server, and the browser. This is
 // what makes the executable - rather than a batch file - the single entry point.
-func launchBundled(ctx context.Context, out io.Writer) error {
+//
+// quiet is set when the launch comes from the login autostart entry: the console
+// stays minimised and no browser is opened, because nobody asked for a window at
+// login time.
+func launchBundled(ctx context.Context, out io.Writer, quiet bool) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return errNotBundled
@@ -78,11 +82,15 @@ func launchBundled(ctx context.Context, out io.Writer) error {
 	defer launcher.StopPostgres()
 
 	fmt.Fprintf(out, "[3/3] 启动 Teldrive 服务：%s\n", serverURL)
-	fmt.Fprintln(out, "------------------------------------------------------------")
-	fmt.Fprintln(out, "  浏览器稍后会自动打开。首次使用请在页面里登录 Telegram。")
-	fmt.Fprintln(out, "  按 Ctrl+C 或关闭本窗口即可停止服务。")
-	fmt.Fprintln(out, "------------------------------------------------------------")
-	go launcher.OpenBrowserWhenReady(ctx, serverURL)
+	if quiet {
+		fmt.Fprintln(out, "      以开机自启方式启动：窗口保持最小化，不打开浏览器。")
+	} else {
+		fmt.Fprintln(out, "------------------------------------------------------------")
+		fmt.Fprintln(out, "  浏览器稍后会自动打开。首次使用请在页面里登录 Telegram。")
+		fmt.Fprintln(out, "  按 Ctrl+C 或关闭本窗口即可停止服务。")
+		fmt.Fprintln(out, "------------------------------------------------------------")
+		go launcher.OpenBrowserWhenReady(ctx, serverURL)
+	}
 
 	application, err := app.New(ctx, cfg, app.Dependencies{Logger: logger, Version: buildVersion()})
 	if err != nil {
