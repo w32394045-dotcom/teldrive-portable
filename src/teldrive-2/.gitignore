@@ -1,0 +1,14 @@
+node_modules/
+.direnv/
+dist/
+test-results/
+.env
+.env.*
+coverage/
+bin/
+*.log
+.DS_Store
+
+coverage.out
+.slim/deepwork/
+ui/.tanstack/

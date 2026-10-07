@@ -1,0 +1,37 @@
+# 由本机打包流程使用；仓库里只放源码和脚本，不放产物与密钥。
+
+# —— 运行数据 / 密钥（绝不入库）——
+/backup/
+/data/
+/pgsql/
+config.toml
+*.pem
+*.key
+*.log
+.env
+.env.*
+
+# —— 构建产物 / 二进制 ——
+/dist/
+*.exe
+*.zip
+*.7z
+/mydb/
+
+# —— JS 依赖与构建输出（各子目录还有自己的 .gitignore）——
+node_modules/
+/src/teldrive-2/ui/dist/
+/src/teldrive-2/docs/out/
+
+# —— 本地工具产物 ——
+/tools/*.png
+/tools/i18n-scan.json
+/tools/messages-*.json
+.bun-cache/
+chrometest/
+
+# —— 编辑器 / 系统 ——
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
