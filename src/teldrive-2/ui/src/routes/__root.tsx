@@ -38,6 +38,7 @@ import SunIcon from "~icons/gravity-ui/sun";
 import CloseIcon from "~icons/gravity-ui/xmark";
 import { $api } from "../api/client";
 import { isUnauthorized, userMessage } from "../api/errors";
+import { clearApiKey } from "../auth/api-key";
 import { currentUserQueryOptions } from "../auth/queries";
 import { UploadShelf } from "../components/upload-shelf";
 import { getQueryClient } from "../lib/queryClient";
@@ -96,14 +97,21 @@ function Sidebar({
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U";
   const signOut = async () => {
+    // Signing out is mostly local: forget the stored API key and the cached
+    // data. The server call revokes the cookie session when there is one, and a
+    // key-based session simply has nothing to revoke -- so an unauthorized
+    // reply must not keep the user in.
+    clearApiKey();
     try {
       await logout.mutateAsync({});
-      getQueryClient().clear();
-      onNavigate?.();
-      await navigate({ to: "/login", search: { redirect: "/files" }, replace: true });
     } catch (error) {
-      toast.error(t("Unable to log out"), { description: userMessage(error) });
+      if (!isUnauthorized(error)) {
+        toast.error(t("Unable to log out"), { description: userMessage(error) });
+      }
     }
+    getQueryClient().clear();
+    onNavigate?.();
+    await navigate({ to: "/login", search: { redirect: "/files" }, replace: true });
   };
   const renderItem = (item: (typeof mainNav)[number]) => {
     const link = (

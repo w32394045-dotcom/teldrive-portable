@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { $api } from "@/api/client";
 import { userMessage } from "@/api/errors";
+import { clearApiKey } from "@/auth/api-key";
 import { useCurrentUser } from "@/auth/use-current-user";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
 import { getQueryClient } from "@/lib/queryClient";
@@ -37,13 +38,16 @@ function AccountSettings() {
   const logout = $api.useMutation("post", "/v1/auth/cookie/logout");
 
   const logOut = async () => {
+    // Drop the stored API key first: it is the credential a key-based session
+    // actually holds, and the cookie logout has nothing to revoke in that case.
+    clearApiKey();
     try {
       await logout.mutateAsync({});
-      getQueryClient().clear();
-      await navigate({ to: "/login", search: { redirect: "/files" }, replace: true });
     } catch (error) {
       toast.error(t("Unable to log out"), { description: userMessage(error) });
     }
+    getQueryClient().clear();
+    await navigate({ to: "/login", search: { redirect: "/files" }, replace: true });
   };
 
   const displayName = user.data.displayName || user.data.username || `User ${user.data.userId}`;

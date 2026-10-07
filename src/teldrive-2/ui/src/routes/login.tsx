@@ -6,6 +6,7 @@ import {
   Input,
   Label,
   Spinner,
+  Switch,
   Tabs,
   TextField,
 } from "@heroui/react";
@@ -15,16 +16,24 @@ import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import PhoneIcon from "~icons/gravity-ui/person";
 import QrIcon from "~icons/gravity-ui/qr-code";
+import KeyIcon from "~icons/gravity-ui/key";
 import ShieldIcon from "~icons/gravity-ui/shield-check";
 import { $api } from "@/api/client";
 import { userMessage } from "@/api/errors";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
 import { currentUserQueryOptions } from "@/auth/queries";
+import {
+  clearApiKey,
+  readApiKey,
+  telegramSignInAllowed,
+  writeApiKey,
+} from "@/auth/api-key";
 import { t } from "@/i18n";
 import { LocaleSelect } from "@/i18n/LocaleSelect";
 
 type Step = "phone" | "code" | "password";
+type Method = "key" | "phone" | "qr";
 type Flow = {
   flowId: string;
   expiresAt: string;
@@ -62,7 +71,10 @@ function isSession(value: unknown): value is CookieSession {
 function LoginPage() {
   const navigate = useNavigate();
   const { redirect } = Route.useSearch();
-  const [method, setMethod] = useState<"phone" | "qr">("phone");
+  // A published origin is a public surface: it offers key sign-in only. The
+  // Telegram flow stays available on the machine that owns the account.
+  const telegramAvailable = telegramSignInAllowed();
+  const [method, setMethod] = useState<Method>(telegramAvailable ? "phone" : "key");
   const [step, setStep] = useState<Step>("phone");
   const [flowId, setFlowId] = useState("");
   const [phone, setPhone] = useState("");
@@ -70,6 +82,9 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [qrUrl, setQrUrl] = useState("");
   const [qrExpiry, setQrExpiry] = useState("");
+  const [apiKey, setApiKey] = useState(() => readApiKey() ?? "");
+  const [rememberDevice, setRememberDevice] = useState(false);
+  const [keyPending, setKeyPending] = useState(false);
 
   const startPhone = $api.useMutation("post", "/v1/auth/telegram/start");
   const verifyCode = $api.useMutation("post", "/v1/auth/cookie/telegram/verify-code");
@@ -87,6 +102,24 @@ function LoginPage() {
     await qc.ensureQueryData(query);
     toast.success(t("Signed in to Teldrive"));
     await navigate({ to: redirect, replace: true });
+  };
+
+  // Sign in by proving the key works: store it, then let the same /v1/me call
+  // the router guard uses decide. A rejected key is forgotten again so the next
+  // visit starts clean.
+  const submitKey = async () => {
+    const value = apiKey.trim();
+    if (!value) return;
+    setKeyPending(true);
+    writeApiKey(value, rememberDevice);
+    try {
+      await finish();
+    } catch (error) {
+      clearApiKey();
+      toast.error(t("API key sign-in failed"), { description: userMessage(error) });
+    } finally {
+      setKeyPending(false);
+    }
   };
 
   const submitPhone = async () => {
@@ -167,6 +200,43 @@ function LoginPage() {
     };
   }, [method]);
 
+  const keyPanel = (
+    <div className="space-y-4 pt-4">
+      <TextField className="grid gap-1">
+        <Label>{t("API key")}</Label>
+        <Input
+          autoFocus
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={t("tdk_...")}
+          value={apiKey}
+          onChange={(event) => setApiKey(event.currentTarget.value)}
+        />
+        <Description>
+          {t("Create one under Settings, API keys. The secret is shown only once.")}
+        </Description>
+      </TextField>
+      <Switch isSelected={rememberDevice} onChange={setRememberDevice}>
+        <Switch.Content>
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+          <Label>{t("Remember this device")}</Label>
+        </Switch.Content>
+      </Switch>
+      <p className="text-xs text-muted">
+        {rememberDevice
+          ? t("The key is kept in this browser until you sign out.")
+          : t("The key is kept for this tab only and is dropped when it closes.")}
+      </p>
+      <Button className="w-full" onPress={submitKey} isDisabled={keyPending || !apiKey.trim()}>
+        {keyPending ? <Spinner size="sm" /> : <KeyIcon className="size-4" />}
+        {t("Sign in")}
+      </Button>
+    </div>
+  );
+
   return (
     <main className="grid min-h-dvh bg-background text-foreground lg:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
       <div className="pointer-events-none fixed right-4 top-4 z-10">
@@ -191,117 +261,129 @@ function LoginPage() {
       <section className="flex items-center justify-center p-4 sm:p-8 lg:p-12">
         <Card className="w-full max-w-md border border-border bg-surface/90 shadow-xl">
           <Card.Header className="block px-6 pt-6">
-            <Card.Title>{t("Sign in with Telegram")}</Card.Title>
+            <Card.Title>
+              {telegramAvailable ? t("Sign in to Teldrive") : t("Sign in with an API key")}
+            </Card.Title>
             <Card.Description>
-              {t("API keys are reserved for rclone and external clients.")}
+              {telegramAvailable
+                ? t("Use your Telegram account, or an API key issued for this machine.")
+                : t("This drive is published through a gateway. Sign in with an API key issued by its owner.")}
             </Card.Description>
           </Card.Header>
           <Card.Content className="space-y-5 px-6 pb-6">
-            <Tabs
-              selectedKey={method}
-              onSelectionChange={(key) => {
-                setMethod(key as "phone" | "qr");
-                setStep("phone");
-              }}
-            >
-              <Tabs.ListContainer>
-                <Tabs.List aria-label={t("Sign-in method")}>
-                  <Tabs.Tab id="phone">
-                    <PhoneIcon className="size-4" /> {t("Phone")}
-                  </Tabs.Tab>
-                  <Tabs.Tab id="qr">
-                    <QrIcon className="size-4" /> {t("QR code")}
-                  </Tabs.Tab>
-                </Tabs.List>
-              </Tabs.ListContainer>
-              <Tabs.Panel id="phone" className="space-y-4 pt-4">
-                {step === "phone" && (
-                  <TextField className="grid gap-1" isInvalid={phoneInvalid}>
-                    <Label>{t("Telegram phone number")}</Label>
-                    <Input
-                      autoFocus
-                      placeholder={PHONE_EXAMPLE}
-                      value={phone}
-                      onChange={(event) => setPhone(normalizePhone(event.target.value))}
-                    />
-                    {phoneInvalid ? (
-                      <FieldError>{t("Start with + and the country code, e.g. {{PHONE_EXAMPLE}}", { PHONE_EXAMPLE })}</FieldError>
-                    ) : (
-                      <Description>{t("Include the country code, e.g. {{PHONE_EXAMPLE}}. Spaces and dashes are fine.", { PHONE_EXAMPLE })}</Description>
-                    )}
-                  </TextField>
-                )}
-                {step === "code" && (
-                  <TextField className="grid gap-1">
-                    <Label>{t("Telegram code")}</Label>
-                    <Input
-                      autoFocus
-                      inputMode="numeric"
-                      value={code}
-                      onChange={(event) => setCode(event.target.value)}
-                    />
-                  </TextField>
-                )}
-                {step === "password" && (
-                  <TextField className="grid gap-1">
-                    <Label>{t("Two-step verification password")}</Label>
-                    <Input
-                      autoFocus
-                      type="password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                    />
-                  </TextField>
-                )}
-                <Button
-                  className="w-full"
-                  onPress={submitPhone}
-                  isDisabled={
-                    pending ||
-                    (step === "phone"
-                      ? !E164_PATTERN.test(phoneValue)
-                      : step === "code"
-                        ? !code.trim()
-                        : !password)
-                  }
-                >
-                  {pending ? <Spinner size="sm" /> : <ShieldIcon className="size-4" />}
-                  {step === "phone" ? t("Send code") : t("Verify and sign in")}
-                </Button>
-                {step !== "phone" && (
-                  <Button
-                    variant="ghost"
-                    className="w-full"
-                    onPress={() => {
-                      setStep("phone");
-                      setFlowId("");
-                      setCode("");
-                      setPassword("");
-                    }}
-                  >
-                    {t("Start again")}
-                  </Button>
-                )}
-              </Tabs.Panel>
-              <Tabs.Panel id="qr" className="space-y-4 pt-4">
-                <div className="grid min-h-72 place-items-center rounded-xl border border-border bg-white p-5 text-black">
-                  {qrUrl ? (
-                    <QRCodeSVG value={qrUrl} size={220} aria-label={t("Telegram sign-in QR code")} />
-                  ) : (
-                    <Spinner size="lg" />
+            {telegramAvailable ? (
+              <Tabs
+                selectedKey={method}
+                onSelectionChange={(key) => {
+                  setMethod(key as Method);
+                  setStep("phone");
+                }}
+              >
+                <Tabs.ListContainer>
+                  <Tabs.List aria-label={t("Sign-in method")}>
+                    <Tabs.Tab id="key">
+                      <KeyIcon className="size-4" /> {t("API key")}
+                    </Tabs.Tab>
+                    <Tabs.Tab id="phone">
+                      <PhoneIcon className="size-4" /> {t("Phone")}
+                    </Tabs.Tab>
+                    <Tabs.Tab id="qr">
+                      <QrIcon className="size-4" /> {t("QR code")}
+                    </Tabs.Tab>
+                  </Tabs.List>
+                </Tabs.ListContainer>
+                <Tabs.Panel id="key">{keyPanel}</Tabs.Panel>
+                <Tabs.Panel id="phone" className="space-y-4 pt-4">
+                  {step === "phone" && (
+                    <TextField className="grid gap-1" isInvalid={phoneInvalid}>
+                      <Label>{t("Telegram phone number")}</Label>
+                      <Input
+                        autoFocus
+                        placeholder={PHONE_EXAMPLE}
+                        value={phone}
+                        onChange={(event) => setPhone(normalizePhone(event.target.value))}
+                      />
+                      {phoneInvalid ? (
+                        <FieldError>{t("Start with + and the country code, e.g. {{PHONE_EXAMPLE}}", { PHONE_EXAMPLE })}</FieldError>
+                      ) : (
+                        <Description>{t("Include the country code, e.g. {{PHONE_EXAMPLE}}. Spaces and dashes are fine.", { PHONE_EXAMPLE })}</Description>
+                      )}
+                    </TextField>
                   )}
-                </div>
-                <div className="text-center">
-                  <p className="font-medium">{t("Scan with Telegram")}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {t("Settings → Devices → Link Desktop Device")}
-                  </p>
-                  <p className="mt-2 text-xs text-muted">
-                    {t("Expires")} {qrExpiry ? new Date(qrExpiry).toLocaleTimeString() : "soon"}
-                  </p>
-                </div>
-              </Tabs.Panel>
-            </Tabs>
+                  {step === "code" && (
+                    <TextField className="grid gap-1">
+                      <Label>{t("Telegram code")}</Label>
+                      <Input
+                        autoFocus
+                        inputMode="numeric"
+                        value={code}
+                        onChange={(event) => setCode(event.target.value)}
+                      />
+                    </TextField>
+                  )}
+                  {step === "password" && (
+                    <TextField className="grid gap-1">
+                      <Label>{t("Two-step verification password")}</Label>
+                      <Input
+                        autoFocus
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                      />
+                    </TextField>
+                  )}
+                  <Button
+                    className="w-full"
+                    onPress={submitPhone}
+                    isDisabled={
+                      pending ||
+                      (step === "phone"
+                        ? !E164_PATTERN.test(phoneValue)
+                        : step === "code"
+                          ? !code.trim()
+                          : !password)
+                    }
+                  >
+                    {pending ? <Spinner size="sm" /> : <ShieldIcon className="size-4" />}
+                    {step === "phone" ? t("Send code") : t("Verify and sign in")}
+                  </Button>
+                  {step !== "phone" && (
+                    <Button
+                      variant="ghost"
+                      className="w-full"
+                      onPress={() => {
+                        setStep("phone");
+                        setFlowId("");
+                        setCode("");
+                        setPassword("");
+                      }}
+                    >
+                      {t("Start again")}
+                    </Button>
+                  )}
+                </Tabs.Panel>
+                <Tabs.Panel id="qr" className="space-y-4 pt-4">
+                  <div className="grid min-h-72 place-items-center rounded-xl border border-border bg-white p-5 text-black">
+                    {qrUrl ? (
+                      <QRCodeSVG value={qrUrl} size={220} aria-label={t("Telegram sign-in QR code")} />
+                    ) : (
+                      <Spinner size="lg" />
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium">{t("Scan with Telegram")}</p>
+                    <p className="mt-1 text-xs text-muted">
+                      {t("Settings → Devices → Link Desktop Device")}
+                    </p>
+                    <p className="mt-2 text-xs text-muted">
+                      {t("Expires")} {qrExpiry ? new Date(qrExpiry).toLocaleTimeString() : "soon"}
+                    </p>
+                  </div>
+                </Tabs.Panel>
+              </Tabs>
+            ) : (
+              keyPanel
+            )}
           </Card.Content>
         </Card>
       </section>

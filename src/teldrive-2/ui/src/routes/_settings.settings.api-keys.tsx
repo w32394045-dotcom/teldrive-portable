@@ -56,7 +56,7 @@ function ApiKeysSettings() {
     <div className="space-y-6">
       <SettingsPageHeader
         title={t("API keys")}
-        description={t("Credentials for rclone and external API clients. They cannot sign in to this browser UI.")}
+        description={t("Credentials for rclone, external API clients, and signing in to a published instance. The secret is shown once.")}
       />
       <SettingsSection
         title={t("Create API key")}
