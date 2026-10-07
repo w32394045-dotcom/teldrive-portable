@@ -7,18 +7,24 @@ the embedded filesystem inside teldrive.exe (which is what proves the whole
 compression path shipped, not just the source).
 """
 import os
+import sys
 import zipfile
 
 WS = r"C:\Users\ptfm\Documents\deepseek-harness\default-workspace"
-ZIP = os.path.join(WS, "dist", "released-v2.0.3.zip")
+ZIP = sys.argv[1] if len(sys.argv) > 1 else os.path.join(WS, "dist", "released-v2.1.0.zip")
+RETIRED_SCRIPTS = ("start.bat", "stop.bat", "_open-browser.bat", "_init-keys.bat")
 
 with zipfile.ZipFile(ZIP) as archive:
     names = archive.namelist()
     print("entries:", len(names))
     print("top level:", sorted({name.split("/")[0] for name in names})[:5])
-    for required in ("start.bat", "stop.bat", "config.toml", "teldrive.exe"):
+    for required in ("teldrive.exe", "config.toml", "使用说明.txt"):
         print(f"  has {required}:", any(name.endswith(required) for name in names))
     print("  ships runtime data/:", any("/data/" in name for name in names))
+    # The whole point of this release: exactly one entry point.
+    for script in RETIRED_SCRIPTS:
+        print(f"  ships {script}:", any(name.endswith(script) for name in names))
+    print("  ships any .bat at all:", any(name.lower().endswith(".bat") for name in names))
 
     exe_name = next(name for name in names if name.endswith("teldrive.exe"))
     blob = archive.read(exe_name)
