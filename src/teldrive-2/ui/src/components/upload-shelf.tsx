@@ -12,7 +12,7 @@ import PauseIcon from "~icons/gravity-ui/pause";
 import PlayIcon from "~icons/gravity-ui/play";
 import TrashIcon from "~icons/gravity-ui/trash-bin";
 import CloseIcon from "~icons/gravity-ui/xmark";
-import { t } from "@/i18n";
+import { t, tPlural } from "@/i18n";
 
 type UploadNode = {
   id: string;
@@ -255,7 +255,7 @@ export function UploadShelf() {
             <p className="truncate text-[11px] text-muted">
               {active
                 ? `${active} active - ${summary.progress}% - ${formatBytes(summary.uploadedBytes)} of ${formatBytes(summary.totalBytes)}`
-                : `${summary.completed} files completed`}
+                : tPlural("{{count}} files completed", summary.completed)}
               {failed ? ` - ${failed} failed` : ""}
             </p>
           </div>

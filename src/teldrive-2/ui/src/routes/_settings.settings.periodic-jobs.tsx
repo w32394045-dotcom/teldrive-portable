@@ -250,8 +250,8 @@ function PeriodicJobsPage() {
           if (!open) setDeleteJob(null);
         }}
         title={t("Delete periodic job?")}
-        message={`The schedule “${deleteJob?.id ?? ""}” will be removed permanently.`}
-        confirmLabel="Delete job"
+        message={t("The schedule “{{value0}}” will be removed permanently.", { value0: deleteJob?.id ?? "" })}
+        confirmLabel={t("Delete job")}
         isPending={deleteMutation.isPending}
         onConfirm={() => {
           if (deleteJob?.id)
@@ -264,7 +264,7 @@ function PeriodicJobsPage() {
         onOpenChange={setResetOpen}
         title={t("Reset periodic jobs?")}
         message={t("All periodic jobs, including custom schedules, will be deleted and the built-in jobs will be recreated with their defaults.")}
-        confirmLabel="Reset to defaults"
+        confirmLabel={t("Reset to defaults")}
         isPending={resetMutation.isPending}
         onConfirm={() => resetMutation.mutate({})}
       />
@@ -319,7 +319,7 @@ function PeriodicJobCard({
             isIconOnly
             size="sm"
             variant="tertiary"
-            aria-label={job.paused ? `Resume ${job.id}` : `Pause ${job.id}`}
+            aria-label={job.paused ? t("Resume {{id}}", { id: job.id }) : t("Pause {{id}}", { id: job.id })}
             isPending={isToggling}
             onPress={onToggle}
           >
@@ -674,7 +674,7 @@ function describeCron(expression: string): string {
   const preset = CRON_PRESETS.find((item) => item.value === expression.trim());
   if (preset) return t("{{label}} in the selected timezone.", { label: preset.label });
   if (!expression.trim()) return t("Enter a cron expression.");
-  return `Custom schedule: ${expression.trim()}`;
+  return t("Custom schedule: {{value0}}", { value0: expression.trim() });
 }
 
 function formatDateTime(value?: string): string {

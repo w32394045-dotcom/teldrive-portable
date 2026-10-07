@@ -4,7 +4,7 @@ import { AppDialog } from "../../components/dialogs/app-dialog";
 import { FilePreviewDialog } from "../../components/file-preview-dialog";
 import { FolderPicker } from "./folder-picker";
 import { ShareDialog } from "./share-dialog";
-import { t } from "@/i18n";
+import { t, tPlural } from "@/i18n";
 
 export function FileActionDialogs({
   renameFile,
@@ -88,7 +88,7 @@ export function FileActionDialogs({
           onOpenChange={(open) => {
             if (!open) destinationAction.onClose();
           }}
-          title={`${destinationAction.mode === "move" ? "Move" : "Copy"} ${destinationAction.count} item${destinationAction.count === 1 ? "" : "s"}`}
+          title={tPlural(destinationAction.mode === "move" ? "Move {{count}} items" : "Copy {{count}} items", destinationAction.count)}
           description={t("Choose the destination folder.")}
           isDismissable={!pending}
           isCloseDisabled={pending}

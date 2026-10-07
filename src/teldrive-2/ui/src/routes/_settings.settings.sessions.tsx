@@ -57,7 +57,7 @@ function SessionsSettings() {
             <SettingsRow
               key={session.id}
               label={session.current ? t("Current session") : t("Teldrive session")}
-              description={`Created ${new Date(session.createdAt).toLocaleString()} · expires ${new Date(session.expiresAt).toLocaleString()}`}
+              description={t("Created {{value0}} · expires {{value1}}", { value0: new Date(session.createdAt).toLocaleString(), value1: new Date(session.expiresAt).toLocaleString() })}
             >
               <div className="flex items-center justify-end gap-2">
                 {session.current ? (
@@ -90,7 +90,7 @@ function SessionsSettings() {
         }}
         title={t("Revoke session?")}
         message={t("This client will need to sign in again.")}
-        confirmLabel="Revoke session"
+        confirmLabel={t("Revoke session")}
         isPending={revoke.isPending}
         onConfirm={() => {
           if (revokeSessionId) {

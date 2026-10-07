@@ -240,7 +240,7 @@ export function PdfReader({ file, url, onClose }: PdfReaderProps) {
 
     void open().catch((reason: unknown) => {
       if (!active) return;
-      setError(reason instanceof Error ? reason.message : "This PDF could not be opened.");
+      setError(reason instanceof Error ? reason.message : t("This PDF could not be opened."));
     });
 
     return () => {
@@ -811,7 +811,7 @@ export function PdfReader({ file, url, onClose }: PdfReaderProps) {
                   isDisabled={saving}
                   onPress={() => void saveModified()}
                 >
-                  {saving ? <Spinner size="sm" /> : <SaveIcon className="size-4" />} Save copy
+                  {saving ? <Spinner size="sm" /> : <SaveIcon className="size-4" />} {t("Save copy")}
                 </Button>
                 <Button size="sm" variant="ghost" onPress={downloadOriginal}>
                   <DownloadIcon className="size-4" /> {t("Original")}
@@ -888,7 +888,7 @@ export function PdfReader({ file, url, onClose }: PdfReaderProps) {
                 <p className="mt-3 text-xs text-muted">
                   {loadingProgress === undefined
                     ? t("Opening document")
-                    : `Loading ${loadingProgress}%`}
+                    : t("Loading {{progress}}%", { progress: loadingProgress })}
                 </p>
               </div>
             </div>

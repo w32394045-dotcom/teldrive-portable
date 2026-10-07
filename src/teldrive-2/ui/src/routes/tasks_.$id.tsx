@@ -88,12 +88,12 @@ function TaskDetailPage() {
     setDeleting(false);
     if (error) {
       toast.error(
-        ACTIVE_STATES.includes(task.status) ? "Failed to cancel task" : "Failed to remove task",
+        ACTIVE_STATES.includes(task.status) ? t("Failed to cancel task") : t("Failed to remove task"),
       );
       return;
     }
     toast.success(
-      ACTIVE_STATES.includes(task.status) ? "Task cancellation requested" : "Task removed",
+      ACTIVE_STATES.includes(task.status) ? t("Task cancellation requested") : t("Task removed"),
     );
     await invalidateTaskQueries(qc, id);
     navigate({
@@ -199,11 +199,11 @@ function TaskDetailPage() {
       </Card>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <JsonPanel title={t("Arguments")} value={task.args} empty="This task has no arguments." />
+        <JsonPanel title={t("Arguments")} value={task.args} empty={t("This task has no arguments.")} />
         <JsonPanel
           title={t("Output")}
           value={task.output}
-          empty="No output was recorded."
+          empty={t("No output was recorded.")}
           downloadName={`task-${task.id}-output.json`}
         />
       </div>
@@ -489,7 +489,7 @@ function BrokenFilesCard({ files, truncated }: { files: BrokenFileEntry[]; trunc
         <div>
           <h2 className="text-sm font-semibold">{t("Broken files")}</h2>
           <p className="mt-0.5 text-xs text-muted">
-            Files with messages missing from Telegram — re-upload the originals to repair them.
+            {t("Files with messages missing from Telegram — re-upload the originals to repair them.")}
             {truncated ? t(" List truncated; download for the full set shown here.") : ""}
           </p>
         </div>
@@ -512,7 +512,7 @@ function BrokenFilesCard({ files, truncated }: { files: BrokenFileEntry[]; trunc
             </span>
             <span className="text-xs text-muted">{formatBytes(file.size)}</span>
             <span className="text-xs text-muted">
-              {missingPartCount(file)} missing part{missingPartCount(file) === 1 ? "" : "s"}
+              {missingPartCount(file)} {t("missing part")}{missingPartCount(file) === 1 ? "" : "s"}
             </span>
           </div>
         ))}

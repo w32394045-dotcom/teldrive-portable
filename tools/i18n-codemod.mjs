@@ -29,14 +29,21 @@ const ATTRS = new Set([
   "tooltip",
   "emptyContent",
   "emptyText",
+  "emptyTitle",
+  "emptyHint",
+  "empty",
   "message",
   "confirmText",
+  "confirmLabel",
   "cancelText",
   "textValue",
   "subtitle",
   "helperText",
   "errorMessage",
   "loadingText",
+  "detail",
+  "rootLabel",
+  "downloadName",
 ]);
 
 const OBJ_KEYS = new Set(["label", "title", "description", "textValue", "placeholder", "emptyText"]);
@@ -114,7 +121,9 @@ for (const file of files) {
     continue;
   }
 
-  // Pick an identifier that is not already bound in this module.
+  // Pick an identifier that is not already bound in this module. Re-running the
+  // codemod must reuse the identifier of an import it added earlier.
+  const existingImport = /import\s*\{\s*([A-Za-z_$][\w$]*)\s*\}\s*from\s*"@\/i18n"/.exec(source);
   let identifier = "t";
   let programPath = null;
   traverse(ast, {
@@ -123,9 +132,9 @@ for (const file of files) {
       p.stop();
     },
   });
-  if (programPath) {
-    const scope = programPath.scope;
-    if (scope.hasBinding("t") || scope.hasGlobal("t")) identifier = "translate";
+  if (existingImport) identifier = existingImport[1];
+  else if (programPath?.scope?.hasBinding("t") || programPath?.scope?.hasGlobal("t")) {
+    identifier = "translate";
   }
 
   traverse(ast, {
@@ -322,19 +331,28 @@ for (const [file, edits] of editsByFile) {
     if (output.slice(edit.start, edit.end) === edit.replacement) continue;
     output = output.slice(0, edit.start) + edit.replacement + output.slice(edit.end);
   }
-  // add the import after the last import statement
-  let identifier = "t";
-  if (/(?:^|\n)\s*(?:const|let|var|function)\s+t\b/.test(source)) identifier = "translate";
-  const importLine = `import { ${identifier} } from "@/i18n";`;
-  const importRe = /^import[\s\S]*?from\s+["'][^"']+["'];?[ \t]*$/gm;
-  let last = null;
-  let match;
-  while ((match = importRe.exec(output)) !== null) last = match;
-  if (last) {
-    const end = last.index + last[0].length;
-    output = `${output.slice(0, end)}\n${importLine}${output.slice(end)}`;
-  } else {
-    output = `${importLine}\n${output}`;
+  // add the import after the last import statement (skip when already present)
+  const fileImport = /import\s*\{\s*([A-Za-z_$][\w$]*)\s*\}\s*from\s*"@\/i18n"/.exec(source);
+  let identifier = fileImport
+    ? fileImport[1]
+    : /(?:^|\n)\s*(?:const|let|var|function)\s+t\b/.test(source)
+      ? "translate"
+      : "t";
+  if (identifier !== "t" && !fileImport) {
+    // Edits were already generated with the same identifier; nothing to rename.
+  }
+  if (!fileImport) {
+    const importLine = `import { ${identifier} } from "@/i18n";`;
+    const importRe = /^import[\s\S]*?from\s+["'][^"']+["'];?[ \t]*$/gm;
+    let last = null;
+    let match;
+    while ((match = importRe.exec(output)) !== null) last = match;
+    if (last) {
+      const end = last.index + last[0].length;
+      output = `${output.slice(0, end)}\n${importLine}${output.slice(end)}`;
+    } else {
+      output = `${importLine}\n${output}`;
+    }
   }
   // Self-check: never write a file that no longer parses.
   try {

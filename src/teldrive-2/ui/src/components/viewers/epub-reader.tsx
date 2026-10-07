@@ -198,7 +198,7 @@ export function EpubReader({ file, url, onClose }: EpubReaderProps) {
     openingRef.current = open().catch((reason: unknown) => {
       if (activeRef.current) {
         setError(
-          reason instanceof Error ? reason.message : "This publication could not be opened.",
+          reason instanceof Error ? reason.message : t("This publication could not be opened."),
         );
       }
     });
@@ -748,7 +748,7 @@ function flattenToc(
 
 function locationLabel(location: Location, progress: number) {
   if (location.current !== undefined && location.total)
-    return `Page ${location.current + 1} of ${location.total}`;
+    return t("Page {{value0}} of {{total}}", { value0: location.current + 1, total: location.total });
   return `${Math.round(progress * 100)}%`;
 }
 

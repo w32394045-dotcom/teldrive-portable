@@ -35,7 +35,7 @@ import {
   invalidSearchDates,
   type SearchState,
 } from "./search-state";
-import { t } from "@/i18n";
+import { t, tPlural } from "@/i18n";
 
 type FileBrowserView = "list" | "grid";
 type PaneId = "primary" | "secondary";
@@ -303,7 +303,7 @@ export function FileManagerPage({
     if (ids.length === 0 || pending) return;
     await performAction(
       () => fileActions.bulkTrash(ids),
-      `${ids.length} item${ids.length === 1 ? "" : "s"} moved to trash`,
+      tPlural("{{count}} items moved to trash", ids.length),
       "Items could not be moved to trash",
       () => setPaneSelectedKeys(pane, new Set()),
     );
@@ -360,7 +360,7 @@ export function FileManagerPage({
         );
       },
       `${target.files.length} item${target.files.length === 1 ? "" : "s"} ${target.mode === "copy" ? "copied" : "moved"}`,
-      target.mode === "copy" ? "Items could not be copied" : "Selected items could not be moved",
+      target.mode === "copy" ? t("Items could not be copied") : t("Selected items could not be moved"),
       () => {
         setDestination(undefined);
         setPaneSelectedKeys(target.pane, new Set());
@@ -535,7 +535,7 @@ export function FileManagerPage({
     try {
       await copyText(selectedFiles.map(absoluteFileDownloadUrl).join("\n"));
       toast.success(
-        `${selectedFiles.length} download link${selectedFiles.length === 1 ? "" : "s"} copied`,
+        tPlural("{{count}} download links copied", selectedFiles.length),
       );
     } catch (error) {
       toast.error(t("Download links could not be copied"), { description: userMessage(error) });
@@ -662,7 +662,7 @@ export function FileManagerPage({
               isIconOnly
               size="sm"
               variant="ghost"
-              aria-label={`Paste ${clipboardItems.length} clipboard item${clipboardItems.length === 1 ? "" : "s"}`}
+              aria-label={tPlural("Paste {{count}} clipboard items", clipboardItems.length)}
               isDisabled={fileActions.pending || !canPasteHere}
               onPress={() => void pasteClipboard(pane)}
             >
@@ -845,15 +845,15 @@ export function FileManagerPage({
                 {missingFolder
                   ? t("Choose a folder to search recursively")
                   : invalidDates
-                    ? "Check the modified-date range"
-                    : "Find anything in your drive"}
+                    ? t("Check the modified-date range")
+                    : t("Find anything in your drive")}
               </p>
               <p className="mt-2 text-sm text-muted">
                 {missingFolder
                   ? t("This saved search has no folder selected.")
                   : invalidDates
-                    ? "Start date must be before end date."
-                    : "Search by filename, or apply filters to explore."}
+                    ? t("Start date must be before end date.")
+                    : t("Search by filename, or apply filters to explore.")}
               </p>
               {(missingFolder || invalidDates) && (
                 <Button variant="secondary" className="mt-3" onPress={() => setFiltersOpen(true)}>

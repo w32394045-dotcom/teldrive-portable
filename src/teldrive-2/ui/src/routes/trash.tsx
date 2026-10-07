@@ -50,7 +50,7 @@ function TrashPage() {
   const purge = async (file: FileEntry) => {
     try {
       await actions.purge(file.id);
-      toast.success(`${file.name} permanently deleted`);
+      toast.success(t("{{name}} permanently deleted", { name: file.name }));
     } catch (error) {
       toast.error(t("File could not be permanently deleted"), { description: userMessage(error) });
     }
@@ -116,7 +116,7 @@ function TrashPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{file.name}</p>
                       <p className="mt-0.5 text-xs text-muted">
-                        Deleted {new Date(file.updatedAt).toLocaleString()}
+                        {t("Deleted")} {new Date(file.updatedAt).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -155,7 +155,7 @@ function TrashPage() {
         }}
         title={t("Permanently delete this item?")}
         message={t("This removes the file record and schedules its Telegram data for physical cleanup. This action cannot be undone.")}
-        confirmLabel="Delete forever"
+        confirmLabel={t("Delete forever")}
         isPending={actions.pending}
         onConfirm={() => {
           if (!purging) return;
@@ -168,7 +168,7 @@ function TrashPage() {
         onOpenChange={setCleaningTrash}
         title={t("Clean all trash?")}
         message={t("This permanently deletes every item in trash and schedules its Telegram data for physical cleanup. This action cannot be undone.")}
-        confirmLabel="Clean trash"
+        confirmLabel={t("Clean trash")}
         isPending={actions.pending}
         onConfirm={() => {
           void cleanTrash().finally(() => setCleaningTrash(false));

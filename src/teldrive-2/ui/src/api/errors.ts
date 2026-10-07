@@ -56,8 +56,8 @@ export function normalizeApiError(error: unknown, response?: Response): ApiError
     error instanceof Error
       ? error.message
       : status
-        ? `Request failed with status ${status}`
-        : "Network request failed";
+        ? t("Request failed with status {{status}}", { status })
+        : t("Network request failed");
   return new ApiError({
     status,
     code:

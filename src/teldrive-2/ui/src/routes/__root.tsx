@@ -302,7 +302,7 @@ function TopBar({
         className="size-9 rounded-xl"
         onPress={desktop ? onToggleSidebar : onOpenMobile}
         aria-label={
-          desktop ? (collapsed ? "Expand sidebar" : "Collapse sidebar") : t("Open navigation")
+          desktop ? (collapsed ? t("Expand sidebar") : t("Collapse sidebar")) : t("Open navigation")
         }
       >
         {desktop ? (

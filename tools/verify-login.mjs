@@ -43,6 +43,15 @@ const check = (name, ok, detail = "") => {
 };
 
 await page.goto(URL_, { waitUntil: "load" });
+// This regression test asserts English copy, so pin the locale.
+await page.addInitScript(() => {
+  try {
+    window.localStorage.setItem("teldrive.locale", "en");
+  } catch {
+    // ignore
+  }
+});
+await page.reload({ waitUntil: "load" });
 await page.waitForSelector("input", { timeout: 20000 });
 await page.waitForTimeout(9000); // give Chrome the same window to auto-translate as before
 

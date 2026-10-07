@@ -135,7 +135,7 @@ export function BackgroundUploadDialog({
       reset();
       onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to queue background upload");
+      toast.error(error instanceof Error ? error.message : t("Failed to queue background upload"));
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +179,7 @@ export function BackgroundUploadDialog({
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">
-                    Source {index + 1}
+                    {t("Source")} {index + 1}
                   </div>
                   <div className="mt-0.5 text-xs text-muted">
                     {source.type === "local" ? t("Read from this server") : t("Fetch over HTTP")}
@@ -189,7 +189,7 @@ export function BackgroundUploadDialog({
                   isIconOnly
                   size="sm"
                   variant="ghost"
-                  aria-label={`Remove source ${index + 1}`}
+                  aria-label={t("Remove source {{value0}}", { value0: index + 1 })}
                   isDisabled={sources.length === 1}
                   onPress={() =>
                     setSources((items) => items.filter((item) => item.id !== source.id))

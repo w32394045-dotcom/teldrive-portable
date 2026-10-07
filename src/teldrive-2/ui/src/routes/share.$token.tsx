@@ -334,7 +334,7 @@ function PublicSharePage() {
             <p className="text-sm font-semibold">Teldrive</p>
             <p className="truncate text-xs text-muted">
               {share
-                ? `${share.file.name} · ${share.file.kind === "folder" ? "Shared folder" : formatFileBytes(share.file.size ?? 0)}`
+                ? `${share.file.name} · ${share.file.kind === "folder" ? t("Shared folder") : formatFileBytes(share.file.size ?? 0)}`
                 : t("Shared item")}
             </p>
           </div>
@@ -495,7 +495,7 @@ function PublicSharePage() {
                       </div>
                     ) : undefined
                   }
-                  emptyHint="No files are available in this shared folder."
+                  emptyHint={t("No files are available in this shared folder.")}
                 />
               </div>
             </PageContent>

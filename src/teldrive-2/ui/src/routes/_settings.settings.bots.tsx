@@ -126,7 +126,7 @@ function BotsSettings() {
             <SettingsRow
               key={bot.id}
               label={`@${bot.username || `bot-${bot.id}`}`}
-              description={`Added ${new Date(bot.createdAt).toLocaleString()}`}
+              description={t("Added {{value0}}", { value0: new Date(bot.createdAt).toLocaleString() })}
             >
               <div className="flex items-center justify-end gap-2">
                 <Chip color={bot.enabled ? "success" : "warning"} variant="tertiary">
@@ -157,8 +157,8 @@ function BotsSettings() {
           if (!open && !remove.isPending) setDeleteBot(null);
         }}
         title={t("Delete Telegram bot?")}
-        message={`Uploads using other bots or your user session will continue after “${deleteBot?.name ?? ""}” is removed.`}
-        confirmLabel="Delete bot"
+        message={t("Uploads using other bots or your user session will continue after “{{value0}}” is removed.", { value0: deleteBot?.name ?? "" })}
+        confirmLabel={t("Delete bot")}
         isPending={remove.isPending}
         onConfirm={() => {
           if (deleteBot) {

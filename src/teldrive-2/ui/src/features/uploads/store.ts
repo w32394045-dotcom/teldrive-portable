@@ -4,6 +4,7 @@ import { invalidResponse, normalizeApiError, userMessage } from "@/api/errors";
 import type { FileEntry, NameConflictPolicy, UploadPart, UploadSession } from "@/api/types";
 import { newClientId } from "@/features/shared/client-id";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
+import { t } from "@/i18n";
 
 export type UploadTaskStatus =
   | "queued"

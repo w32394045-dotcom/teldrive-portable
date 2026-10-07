@@ -127,7 +127,7 @@ function ApiKeysSettings() {
             <SettingsRow
               key={item.id}
               label={item.name}
-              description={`Created ${formatDate(item.createdAt)} · last used ${formatDate(item.lastUsedAt)}`}
+              description={t("Created {{value0}} · last used {{value1}}", { value0: formatDate(item.createdAt), value1: formatDate(item.lastUsedAt) })}
             >
               <div className="flex justify-end">
                 <Button
@@ -153,8 +153,8 @@ function ApiKeysSettings() {
           if (!open && !revoke.isPending) setRevokeKey(null);
         }}
         title={t("Revoke API key?")}
-        message={`Applications using “${revokeKey?.name ?? ""}” will lose access immediately.`}
-        confirmLabel="Revoke key"
+        message={t("Applications using “{{value0}}” will lose access immediately.", { value0: revokeKey?.name ?? "" })}
+        confirmLabel={t("Revoke key")}
         isPending={revoke.isPending}
         onConfirm={() => {
           if (revokeKey) {

@@ -235,13 +235,13 @@ function TasksPage() {
     if (error) {
       toast.error(
         CANCELLABLE_STATUSES.includes(task.status)
-          ? "Failed to cancel task"
-          : "Failed to remove task",
+          ? t("Failed to cancel task")
+          : t("Failed to remove task"),
       );
       return;
     }
     toast.success(
-      CANCELLABLE_STATUSES.includes(task.status) ? "Task cancellation requested" : "Task removed",
+      CANCELLABLE_STATUSES.includes(task.status) ? t("Task cancellation requested") : t("Task removed"),
     );
     refreshTasks();
   };
@@ -254,7 +254,7 @@ function TasksPage() {
     });
     setCleaning(false);
     if (error) {
-      toast.error(`Failed to clean ${cleanupStatus} tasks`);
+      toast.error(t("Failed to clean {{cleanupStatus}} tasks", { cleanupStatus }));
       return;
     }
 
@@ -382,7 +382,7 @@ function TasksPage() {
             <PrevIcon className="size-3.5" /> {t("Previous")}
           </Button>
           <span className="min-w-20 text-center text-xs text-muted">
-            Page {cursorHistory.length + 1}
+            {t("Page")} {cursorHistory.length + 1}
           </span>
           <Button size="sm" variant="tertiary" isDisabled={!meta?.nextCursor} onPress={goNext}>
             {t("Next")} <NextIcon className="size-3.5" />
@@ -394,9 +394,9 @@ function TasksPage() {
         open={cleanupStatus != null}
         onOpenChange={(open) => !open && setCleanupStatus(null)}
         onConfirm={cleanTasks}
-        title={`Clean ${cleanupStatus ?? ""} tasks?`}
+        title={t("Clean {{value0}} tasks?", { value0: cleanupStatus ?? "" })}
         message={`This permanently removes all ${cleanupStatus ? (taskStats?.[cleanupStatus] ?? 0) : 0} ${cleanupStatus ?? ""} task records. Other task statuses are not affected.`}
-        confirmLabel="Clean"
+        confirmLabel={t("Clean")}
         isPending={cleaning}
       />
     </Page>
@@ -452,7 +452,7 @@ function TaskRow({
             </span>
             {(task.attempt ?? 0) > 0 ? (
               <span className="hidden shrink-0 sm:inline lg:hidden">
-                Attempt {task.attempt} of {task.maxAttempts || "—"}
+                {t("Attempt")} {task.attempt} of {task.maxAttempts || "—"}
               </span>
             ) : null}
           </div>

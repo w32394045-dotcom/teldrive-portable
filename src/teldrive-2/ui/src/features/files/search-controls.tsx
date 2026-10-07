@@ -69,7 +69,7 @@ export function SearchControls({
                   (draft.parentId ? (
                     <div className="flex items-center justify-between gap-2 text-xs text-muted">
                       <span className="min-w-0 truncate" title={draft.folderPath}>
-                        Folder: {draft.folderPath ?? "Selected folder"}
+                        {t("Folder:")} {draft.folderPath ?? "Selected folder"}
                       </span>
                       <Button
                         size="sm"
@@ -89,7 +89,7 @@ export function SearchControls({
                     <div className="rounded-xl border border-border p-3">
                       <p className="mb-2 text-xs text-muted">{t("Choose a folder to search within.")}</p>
                       <FolderPicker
-                        confirmLabel="Use this folder"
+                        confirmLabel={t("Use this folder")}
                         requireFolder
                         onConfirm={(parentId, path) => {
                           if (parentId)
@@ -202,7 +202,7 @@ export function SearchControls({
           {search.q && <FilterChip label={t("Name: {{q}}", { q: search.q })} onRemove={() => remove("q")} />}
           {search.scope === "recursive" && (
             <FilterChip
-              label={`In ${search.folderPath ?? "selected folder"}`}
+              label={t("In {{value0}}", { value0: search.folderPath ?? "selected folder" })}
               onRemove={() =>
                 onChange({ ...search, scope: "drive", parentId: undefined, folderPath: undefined })
               }
@@ -228,13 +228,13 @@ export function SearchControls({
           ))}
           {search.updatedAfter && (
             <FilterChip
-              label={`After ${search.updatedAfter.slice(0, 10)}`}
+              label={t("After {{value0}}", { value0: search.updatedAfter.slice(0, 10) })}
               onRemove={() => remove("updatedAfter")}
             />
           )}
           {search.updatedBefore && (
             <FilterChip
-              label={`Before ${search.updatedBefore.slice(0, 10)}`}
+              label={t("Before {{value0}}", { value0: search.updatedBefore.slice(0, 10) })}
               onRemove={() => remove("updatedBefore")}
             />
           )}

@@ -64,7 +64,7 @@ function StoragePage() {
         <StatCard
           label={t("Total stored")}
           value={formatBytes(summary.logicalBytes)}
-          detail={`${formatBytes(data.growth.at(-1)?.addedBytes ?? 0)} added today`}
+          detail={t("{{value0}} added today", { value0: formatBytes(data.growth.at(-1)?.addedBytes ?? 0) })}
         />
         <StatCard
           label={t("Active files")}
@@ -84,7 +84,7 @@ function StoragePage() {
         <StatCard
           label={t("Reclaimable")}
           value={formatBytes(data.cleanup.totalReclaimableBytes)}
-          detail={`${data.cleanup.staleUploads.toLocaleString()} stale uploads`}
+          detail={t("{{value0}} stale uploads", { value0: data.cleanup.staleUploads.toLocaleString() })}
         />
       </div>
 
@@ -168,7 +168,7 @@ function StoragePage() {
                         )}
                       </div>
                       <div className="mt-1 text-xs text-muted">
-                        {channel.partCount.toLocaleString()} parts · {percent.toFixed(1)}%
+                        {channel.partCount.toLocaleString()} {t("parts ·")} {percent.toFixed(1)}%
                       </div>
                     </div>
                   </div>

@@ -22,17 +22,20 @@ problems = []
 
 for locale in ["zh-CN", "zh-TW", "ja", "ko"]:
     main_path = os.path.join(MSG, f"{locale}.json")
-    extra_path = os.path.join(WS, "tools", f"i18n-extra-{locale}.json")
 
     catalog = json.load(open(main_path, encoding="utf-8"))
     before = len(catalog)
-    if os.path.exists(extra_path):
-        extra = json.load(open(extra_path, encoding="utf-8"))
-        catalog.update(extra)
-        print(f"{locale}: merged {len(extra)} extra keys")
+    merged_extras = 0
+    for extra_name in (f"i18n-extra-{locale}.json", f"i18n-extra2-{locale}.json"):
+        extra_path = os.path.join(WS, "tools", extra_name)
+        if os.path.exists(extra_path):
+            extra = json.load(open(extra_path, encoding="utf-8"))
+            catalog.update(extra)
+            merged_extras += len(extra)
+            print(f"{locale}: merged {len(extra)} keys from {extra_name}")
 
     merged = {k: v for k, v in catalog.items() if k in wanted}
-    dropped = before + (len(extra) if os.path.exists(extra_path) else 0) - len(merged)
+    dropped = before + merged_extras - len(merged)
 
     missing = sorted(wanted - set(merged))
     if missing:

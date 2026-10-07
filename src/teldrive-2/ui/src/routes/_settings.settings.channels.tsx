@@ -166,8 +166,8 @@ function ChannelsSettings() {
           if (!open && !remove.isPending) setDeleteChannel(null);
         }}
         title={t("Delete storage channel?")}
-        message={`“${deleteChannel?.name ?? ""}” can only be deleted when no files reference it.`}
-        confirmLabel="Delete channel"
+        message={t("“{{value0}}” can only be deleted when no files reference it.", { value0: deleteChannel?.name ?? "" })}
+        confirmLabel={t("Delete channel")}
         isPending={remove.isPending}
         onConfirm={() => {
           if (deleteChannel) {

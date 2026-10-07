@@ -81,7 +81,7 @@ function AccountSettings() {
                     : "default"
               }
             >
-              {user.data.role === "owner" ? t("Owner") : user.data.role === "admin" ? "Admin" : "User"}
+              {user.data.role === "owner" ? t("Owner") : user.data.role === "admin" ? t("Admin") : t("User")}
             </Chip>
           </div>
         </SettingsRow>

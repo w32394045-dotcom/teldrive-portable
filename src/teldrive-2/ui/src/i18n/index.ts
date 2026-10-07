@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import en from "./messages/en.json";
 import ja from "./messages/ja.json";
 import ko from "./messages/ko.json";
 import zhCN from "./messages/zh-CN.json";
@@ -33,6 +34,7 @@ const STORAGE_KEY = "teldrive.locale";
 type Catalog = Record<string, string>;
 
 const catalogs: Partial<Record<Locale, Catalog>> = {
+  en: en as Catalog,
   "zh-CN": zhCN as Catalog,
   "zh-TW": zhTW as Catalog,
   ja: ja as Catalog,
@@ -107,15 +109,30 @@ export function subscribeLocale(listener: () => void): () => void {
 
 const PLACEHOLDER = /\{\{\s*([\w.$-]+)\s*\}\}/g;
 
+function interpolate(message: string, vars?: Record<string, string | number>): string {
+  if (!vars) return message;
+  return message.replace(PLACEHOLDER, (match, name: string) =>
+    vars[name] === undefined ? match : String(vars[name]),
+  );
+}
+
 /** Translate a message; unknown keys fall back to the English source text. */
 export function t(key: string, vars?: Record<string, string | number>): string {
   const catalog = catalogs[current];
-  let message = (catalog && catalog[key]) || key;
-  if (!vars) return message;
-  message = message.replace(PLACEHOLDER, (match, name: string) =>
-    vars[name] === undefined ? match : String(vars[name]),
-  );
-  return message;
+  const message = (catalog && catalog[key]) || key;
+  return interpolate(message, vars);
+}
+
+/**
+ * Plural-aware variant. The key is the English *plural* form; locales that need
+ * a distinct singular provide "<key>.one" (English does, in en.json), and CJK
+ * simply falls back to the same string for both counts.
+ */
+export function tPlural(key: string, count: number, vars?: Record<string, string | number>): string {
+  const catalog = catalogs[current];
+  const variant = count === 1 ? ".one" : ".other";
+  const message = (catalog && (catalog[key + variant] || catalog[key])) || key;
+  return interpolate(message, { count, ...vars });
 }
 
 /** Subscribe a component to locale changes. */

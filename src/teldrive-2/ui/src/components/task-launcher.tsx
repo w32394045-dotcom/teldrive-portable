@@ -257,7 +257,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
               {t("Cancel")}
             </Button>
             <form.SubmitButton variant="primary">
-              Queue {selected.label.toLowerCase()}
+              {t("Queue")} {selected.label.toLowerCase()}
             </form.SubmitButton>
           </div>
         </form>

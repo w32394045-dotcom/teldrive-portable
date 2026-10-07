@@ -240,7 +240,7 @@ function TextViewer({ url }: { url: string }) {
       .then((value) => setText(value.slice(0, 1_000_000)))
       .catch((reason: unknown) => {
         if (!controller.signal.aborted)
-          setError(reason instanceof Error ? reason.message : "Preview failed");
+          setError(reason instanceof Error ? reason.message : t("Preview failed"));
       });
     return () => controller.abort();
   }, [url]);

@@ -155,7 +155,7 @@ export function ShareDialog({
     <AppDialog
       open={Boolean(file)}
       onOpenChange={onOpenChange}
-      title={file ? `Share ${file.name}` : t("Share item")}
+      title={file ? t("Share {{name}}", { name: file.name }) : t("Share item")}
       description={t("Manage who can access this item and create public links.")}
       size="lg"
       className="sm:w-[min(92vw,46rem)]"
@@ -211,7 +211,7 @@ export function ShareDialog({
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">
-                        {user.displayName?.trim() || user.username?.trim() || `User ${user.userId}`}
+                        {user.displayName?.trim() || user.username?.trim() || t("User {{id}}", { id: user.userId })}
                       </span>
                       <span className="block truncate text-xs text-muted">
                         {user.username ? `@${user.username} · ` : ""}Telegram ID {user.userId}
@@ -240,7 +240,7 @@ export function ShareDialog({
                     <p className="truncate text-sm font-medium">
                       {grant.granteeDisplayName?.trim() ||
                         grant.granteeUsername?.trim() ||
-                        `User ${grant.granteeUserId}`}
+                        t("User {{id}}", { id: grant.granteeUserId })}
                     </p>
                     <p className="truncate text-xs text-muted">
                       {grant.granteeUsername ? `@${grant.granteeUsername} · ` : ""}
@@ -248,7 +248,7 @@ export function ShareDialog({
                     </p>
                     <p className="mt-0.5 truncate text-xs text-muted">
                       {grant.expiresAt
-                        ? `Expires ${new Date(grant.expiresAt).toLocaleString()}`
+                        ? t("Expires {{date}}", { date: new Date(grant.expiresAt).toLocaleString() })
                         : t("No expiration")}
                     </p>
                   </div>
@@ -299,7 +299,9 @@ export function ShareDialog({
                         }}
                       >
                         <Dropdown.Item id="permission" textValue={t("Change permission")}>
-                          <Label>Make {grant.permission === "read" ? "editor" : "viewer"}</Label>
+                          <Label>
+                            {grant.permission === "read" ? t("Make editor") : t("Make viewer")}
+                          </Label>
                         </Dropdown.Item>
                         <Dropdown.Item id="remove" textValue={t("Remove access")}>
                           <Label>{t("Remove access")}</Label>
@@ -389,7 +391,7 @@ export function ShareDialog({
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">
-                      Public {link.permission === "read" ? "viewer" : "editor"} link
+                      {t("Public")} {link.permission === "read" ? "viewer" : "editor"} link
                     </p>
                     <p className="truncate text-xs text-muted">
                       {link.passwordProtected ? t("Password protected · ") : ""}

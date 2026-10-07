@@ -297,7 +297,7 @@ function LoginPage() {
                     {t("Settings → Devices → Link Desktop Device")}
                   </p>
                   <p className="mt-2 text-xs text-muted">
-                    Expires {qrExpiry ? new Date(qrExpiry).toLocaleTimeString() : "soon"}
+                    {t("Expires")} {qrExpiry ? new Date(qrExpiry).toLocaleTimeString() : "soon"}
                   </p>
                 </div>
               </Tabs.Panel>

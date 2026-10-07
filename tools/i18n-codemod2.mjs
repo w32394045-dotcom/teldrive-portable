@@ -23,6 +23,34 @@ const ATTRS = new Set([
 
 const SKIP_FILES = [/[\\/]i18n[\\/]/, /routeTree\.gen\.ts$/, /[\\/]api[\\/]schema\.ts$/, /[\\/]gen[\\/]/];
 
+// Elements whose text is technical content rather than prose.
+const SKIP_ELEMENTS = new Set(["kbd", "Kbd", "code", "pre", "samp", "script", "style", "textarea"]);
+
+function decodeEntities(value) {
+  return value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&middot;/g, "·");
+}
+
+/** CSS/URL/SQL snippets must never be translated. */
+function looksLikeCode(value) {
+  return (
+    value.includes(";") ||
+    value.includes("@namespace") ||
+    value.includes("color-scheme") ||
+    value.includes("!important") ||
+    value.includes("://") ||
+    value.includes("{") ||
+    value.includes("}") ||
+    /(^|\s)(select|insert|update|delete|from)\s/i.test(value)
+  );
+}
+
 const PRODUCT_NAMES = [
   /\bTeldrive\b/g, /\bTelegram\b/g, /\bRiver\b/g, /\brclone\b/g, /\bAPI\b/g, /\bQR\b/g,
   /\bURL\b/g, /\bID\b/g, /\bE\.164\b/g, /\bMiB\b/g, /\bGiB\b/g, /\bKiB\b/g, /\bBLAKE3\b/g,
@@ -70,6 +98,22 @@ function collect(dir, out = []) {
     }
   }
   return out;
+}
+
+/** Does this expression subtree contain a ternary (needs human wording)? */
+function hasConditional(node) {
+  if (!node || typeof node.type !== "string") return false;
+  if (node.type === "ConditionalExpression") return true;
+  for (const key of Object.keys(node)) {
+    if (["loc", "start", "end", "leadingComments", "trailingComments", "extra"].includes(key)) continue;
+    const child = node[key];
+    if (Array.isArray(child)) {
+      if (child.some((item) => hasConditional(item))) return true;
+    } else if (child && typeof child.type === "string" && hasConditional(child)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const files = collect(UI + "/src");
@@ -133,19 +177,95 @@ for (const file of files) {
         parts.push(expr.value);
         continue;
       } else {
-        return null;
+        // Arbitrary inline expression (e.g. `index + 1`, `job?.id ?? ""`): pass it
+        // through as a positional placeholder. Nested ternaries are skipped
+        // because they need human wording, not a machine placeholder.
+        const raw = source.slice(expr.start, expr.end);
+        if (raw.length > 160 || raw.includes("`") || raw.includes("<") || hasConditional(expr)) return null;
+        name = `value${vars.size}`;
+        value = raw;
       }
       vars.set(name, value);
       parts.push(`{{${name}}}`);
     }
     const template = parts.join("").replace(/\s+/g, " ").trim();
+    const rawText = node.quasis.map((q) => q.value.cooked ?? "").join(" ");
+    if (looksLikeCode(rawText)) return null;
     if (!translatable(template.replace(/\{\{[^}]+\}\}/g, " "))) return null;
     if (!template.includes("{{")) return null;
     const args = [...vars.entries()].map(([name, value]) => (name === value ? name : `${name}: ${value}`));
     return { key: template, call: `${identifier}(${JSON.stringify(template)}, { ${args.join(", ")} })` };
   };
 
+  /** Wrap the string branches of every conditional inside an expression. */
+  const wrapConditionals = (node) => {
+    const visit = (n) => {
+      if (!n || typeof n.type !== "string") return;
+      if (
+        n.type === "JSXElement" ||
+        n.type === "JSXFragment" ||
+        n.type === "FunctionExpression" ||
+        n.type === "ArrowFunctionExpression" ||
+        n.type === "FunctionDeclaration"
+      )
+        return;
+      if (n.type === "ConditionalExpression") {
+        for (const branch of [n.consequent, n.alternate]) {
+          if (branch.type === "StringLiteral" && translatable(branch.value)) {
+            add(branch.start, branch.end, `${identifier}(${JSON.stringify(branch.value)})`, branch.value);
+            stats.ternary = (stats.ternary ?? 0) + 1;
+          } else {
+            visit(branch);
+          }
+        }
+        return;
+      }
+      for (const key of Object.keys(n)) {
+        if (["loc", "start", "end", "leadingComments", "trailingComments", "extra"].includes(key)) continue;
+        const child = n[key];
+        if (Array.isArray(child)) {
+          for (const item of child) visit(item);
+        } else if (child && typeof child.type === "string") {
+          visit(child);
+        }
+      }
+    };
+    visit(node);
+  };
+
   traverse(ast, {
+    JSXText(p) {
+      const raw = p.node.value;
+      const inner = raw.trim();
+      if (!translatable(decodeEntities(inner))) return;
+      const parent = p.parent;
+      if (parent?.type === "JSXElement") {
+        const name = parent.openingElement.name;
+        if (name.type === "JSXIdentifier" && SKIP_ELEMENTS.has(name.name)) return;
+      }
+      const leading = raw.slice(0, raw.length - raw.trimStart().length);
+      const trailing = raw.slice(raw.trimEnd().length);
+      const text = decodeEntities(inner.replace(/\s+/g, " "));
+      add(p.node.start, p.node.end, `${leading}{${identifier}(${JSON.stringify(text)})}${trailing}`, text);
+      stats.jsxText = (stats.jsxText ?? 0) + 1;
+    },
+
+    CallExpression(p) {
+      // UI helpers such as toast.error(...) / setError(...) / performAction(...)
+      // carry inline ternaries and template literals.
+      for (const arg of p.node.arguments) {
+        if (arg.type === "TemplateLiteral") {
+          const built = templateCall(arg);
+          if (built) {
+            add(arg.start, arg.end, built.call, built.key);
+            stats.callTemplate = (stats.callTemplate ?? 0) + 1;
+          }
+          continue;
+        }
+        wrapConditionals(arg);
+      }
+    },
+
     JSXAttribute(p) {
       const name = p.node.name?.name;
       if (!name || !ATTRS.has(name)) return;
@@ -161,11 +281,7 @@ for (const file of files) {
         return;
       }
       if (expr.type === "ConditionalExpression") {
-        for (const branch of [expr.consequent, expr.alternate]) {
-          if (branch.type !== "StringLiteral" || !translatable(branch.value)) continue;
-          add(branch.start, branch.end, `${identifier}(${JSON.stringify(branch.value)})`, branch.value);
-          stats.attrTernary += 1;
-        }
+        wrapConditionals(expr);
       }
     },
 
@@ -173,20 +289,17 @@ for (const file of files) {
       const parent = p.parent;
       if (parent?.type !== "JSXElement" && parent?.type !== "JSXFragment") return;
       const expr = p.node.expression;
-      if (expr.type === "ConditionalExpression") {
-        for (const branch of [expr.consequent, expr.alternate]) {
-          if (branch.type !== "StringLiteral" || !translatable(branch.value)) continue;
-          add(branch.start, branch.end, `${identifier}(${JSON.stringify(branch.value)})`, branch.value);
-          stats.childTernary += 1;
+      if (expr.type === "TemplateLiteral" || expr.type === "ConditionalExpression") {
+        if (expr.type === "TemplateLiteral") {
+          const built = templateCall(expr);
+          if (built) {
+            add(expr.start, expr.end, built.call, built.key);
+            stats.childTemplate += 1;
+          }
+        } else {
+          wrapConditionals(expr);
         }
         return;
-      }
-      if (expr.type === "TemplateLiteral") {
-        const built = templateCall(expr);
-        if (built) {
-          add(expr.start, expr.end, built.call, built.key);
-          stats.childTemplate += 1;
-        }
       }
     },
 
@@ -208,11 +321,7 @@ for (const file of files) {
         return;
       }
       if (arg.type === "ConditionalExpression") {
-        for (const branch of [arg.consequent, arg.alternate]) {
-          if (branch.type !== "StringLiteral" || !translatable(branch.value)) continue;
-          add(branch.start, branch.end, `${identifier}(${JSON.stringify(branch.value)})`, branch.value);
-          stats.retTernary += 1;
-        }
+        wrapConditionals(arg);
       }
     },
   });

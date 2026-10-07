@@ -400,8 +400,8 @@ export function SharedFileBrowser({ mode, search, navigate }: SharedFileBrowserP
           emptyHint={
             atRoot
               ? mode === "with-me"
-                ? "Files and folders shared with you appear here."
-                : "Files and folders you shared appear here."
+                ? t("Files and folders shared with you appear here.")
+                : t("Files and folders you shared appear here.")
               : t("This shared folder is empty.")
           }
         />
