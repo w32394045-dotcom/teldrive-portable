@@ -25,7 +25,7 @@ import type { components } from "@/api/schema";
 import { $api as api } from "@/api/client";
 import { queryClient } from "@/api/query-client";
 import { useAppForm } from "../forms/app-form";
-import { t } from "@/i18n";
+import { t, tIdentifier } from "@/i18n";
 
 type PeriodicJob = components["schemas"]["PeriodicJob"];
 type PeriodicJobTemplate = components["schemas"]["PeriodicJobTemplate"];
@@ -297,7 +297,7 @@ function PeriodicJobCard({
               {job.paused ? t("Paused") : t("Active")}
             </Chip>
             <Chip size="sm" variant="tertiary">
-              {job.kind}
+              {tIdentifier(job.kind)}
             </Chip>
           </div>
           <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
@@ -486,11 +486,13 @@ function PeriodicJobEditor({
                     <ListBox.Item
                       key={template.kind}
                       id={template.kind ?? ""}
-                      textValue={template.label ?? template.kind}
+                      textValue={t(template.label || tIdentifier(template.kind))}
                     >
                       <div>
-                        <div className="text-sm font-medium">{template.label ?? template.kind}</div>
-                        <div className="text-xs text-muted">{template.description}</div>
+                        <div className="text-sm font-medium">
+                          {t(template.label || tIdentifier(template.kind))}
+                        </div>
+                        <div className="text-xs text-muted">{t(template.description)}</div>
                       </div>
                     </ListBox.Item>
                   ))}
@@ -672,7 +674,7 @@ function parseArguments(value: string): Record<string, unknown> {
 
 function describeCron(expression: string): string {
   const preset = CRON_PRESETS.find((item) => item.value === expression.trim());
-  if (preset) return t("{{label}} in the selected timezone.", { label: preset.label });
+  if (preset) return t("{{label}} in the selected timezone.", { label: t(preset.label) });
   if (!expression.trim()) return t("Enter a cron expression.");
   return t("Custom schedule: {{value0}}", { value0: expression.trim() });
 }

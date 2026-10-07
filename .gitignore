@@ -23,11 +23,19 @@ node_modules/
 /src/teldrive-2/ui/dist/
 /src/teldrive-2/docs/out/
 
-# —— 本地工具产物 ——
+# —— 本地工具产物（脚本入库，审计报告/截图/指标不入库）——
+/tools/_*
+/tools/*.log
+/tools/*.txt
+/tools/*.json
 /tools/*.png
-/tools/i18n-*.json
-/tools/messages-*.json
-/tools/typecheck*.txt
+/tools/display-i18n/
+/tools/ui-light/
+/tools/ui-dark/
+/tools/ui-light-forced/
+/tools/ui-baseline/
+/tools/ui-baseline2/
+/src/tools/
 .bun-cache/
 chrometest/
 
@@ -36,5 +44,3 @@ chrometest/
 Thumbs.db
 .vscode/
 .idea/
-/tools/build*.txt
-/tools/scan.txt

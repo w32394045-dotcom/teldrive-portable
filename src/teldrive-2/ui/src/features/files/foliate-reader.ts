@@ -1,4 +1,3 @@
-import { t } from "@/i18n";
 export interface ReaderPreferences {
   theme: string;
   flow: string;

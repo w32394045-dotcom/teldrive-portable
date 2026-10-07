@@ -41,7 +41,7 @@ function TrashPage() {
   const restore = async (file: FileEntry) => {
     try {
       await actions.restore(file.id);
-      toast.success(`${file.name} restored`);
+      toast.success(t("{{name}} restored", { name: file.name }));
     } catch (error) {
       toast.error(t("File could not be restored"), { description: userMessage(error) });
     }
@@ -120,8 +120,8 @@ function TrashPage() {
                       </p>
                     </div>
                   </div>
-                  <Chip size="sm" variant="tertiary" className="w-fit capitalize">
-                    {file.kind}
+                  <Chip size="sm" variant="tertiary" className="w-fit">
+                    {t(file.kind === "folder" ? "Folder" : "File")}
                   </Chip>
                   <div className="flex justify-end gap-2">
                     <Button

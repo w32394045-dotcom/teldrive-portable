@@ -61,7 +61,9 @@ function UploadSettings() {
                 <ListBox.Item id="replace" textValue={t("Replace existing")}>
                   {t("Replace existing")}
                 </ListBox.Item>
-                <ListBox.Item id="error" textValue={t("Stop with error")}>
+                {/* The API enum is "fail" | "replace" | "rename"; a stale
+                    "error" value here made every upload fail with a 400. */}
+                <ListBox.Item id="fail" textValue={t("Stop with error")}>
                   {t("Stop with error")}
                 </ListBox.Item>
               </ListBox>

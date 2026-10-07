@@ -68,7 +68,10 @@
     --overlay-foreground: oklch(0.145 0 0);
 
     --muted-background: oklch(0.952 0 0);
-    --muted: oklch(0.556 0 0);
+    /* 0.505 clears WCAG AA on both --background and the --default chip; the
+       previous 0.556 only just passed on --background (4.50) and failed on
+       --default (3.76). */
+    --muted: oklch(0.505 0 0);
 
     --field-background: oklch(0.965 0 0);
     --field-foreground: var(--foreground);
@@ -80,7 +83,8 @@
     --accent: oklch(0.45 0.12 40);
     --accent-foreground: oklch(0.99 0 0);
 
-    --danger: oklch(0.637 0.208 25);
+    /* 0.58 (was 0.637) is the lightest red whose white label still clears 4.5:1. */
+    --danger: oklch(0.58 0.208 25);
     --danger-foreground: oklch(0.99 0 0);
     --success: oklch(0.723 0.219 149);
     --warning: oklch(0.782 0.163 72);
@@ -93,6 +97,16 @@
     --sidebar: oklch(0.988 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-border: oklch(0.929 0 0);
+
+    /* Frosted panels used by the file preview dialog. */
+    --glass-background: oklch(1 0 0 / 0.78);
+    --glass-border: oklch(0.145 0 0 / 0.08);
+    --glass-shadow:
+      0 4px 24px oklch(0.145 0 0 / 0.12), inset 0 1px 0 oklch(1 1 0 / 0.6);
+    --glass-lg-background: oklch(1 0 0 / 0.85);
+    --glass-lg-border: oklch(0.145 0 0 / 0.1);
+    --glass-lg-shadow:
+      0 8px 32px oklch(0.145 0 0 / 0.16), inset 0 1px 0 oklch(1 1 0 / 0.6);
   }
 
   /* ─── Dark theme (warm cinema) ─── */
@@ -122,7 +136,7 @@
     --accent: oklch(0.86 0.09 70);
     --accent-foreground: oklch(0.15 0.02 200);
 
-    --danger: oklch(0.637 0.208 25);
+    --danger: oklch(0.58 0.208 25);
     --danger-foreground: oklch(0.99 0 0);
 
     --separator: oklch(0.26 0.008 70);
@@ -133,29 +147,34 @@
     --sidebar: oklch(0.16 0.005 70);
     --sidebar-foreground: oklch(0.89 0 0);
     --sidebar-border: oklch(0.24 0.006 70);
+
+    --glass-background: oklch(0.21 0.008 70 / 0.6);
+    --glass-border: oklch(0.95 0.02 70 / 0.08);
+    --glass-shadow:
+      0 4px 24px oklch(0 0 0 / 0.3), inset 0 1px 0 oklch(1 1 0 / 0.04);
+    --glass-lg-background: oklch(0.23 0.01 70 / 0.7);
+    --glass-lg-border: oklch(0.95 0.02 70 / 0.1);
+    --glass-lg-shadow:
+      0 8px 32px oklch(0 0 0 / 0.35), inset 0 1px 0 oklch(1 1 0 / 0.05);
   }
 }
 
 /* ─── Component layer ─── */
 @layer components {
   .glass-panel {
-    background-color: oklch(0.21 0.008 70 / 0.6);
+    background-color: var(--glass-background);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid oklch(0.95 0.02 70 / 0.08);
-    box-shadow:
-      0 4px 24px oklch(0 0 0 / 0.3),
-      inset 0 1px 0 oklch(1 1 0 / 0.04);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
   }
 
   .glass-panel-lg {
-    background-color: oklch(0.23 0.01 70 / 0.7);
+    background-color: var(--glass-lg-background);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    border: 1px solid oklch(0.95 0.02 70 / 0.1);
-    box-shadow:
-      0 8px 32px oklch(0 0 0 / 0.35),
-      inset 0 1px 0 oklch(1 1 0 / 0.05);
+    border: 1px solid var(--glass-lg-border);
+    box-shadow: var(--glass-lg-shadow);
   }
 
   .warm-gradient {

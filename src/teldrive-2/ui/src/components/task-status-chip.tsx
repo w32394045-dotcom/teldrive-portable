@@ -1,9 +1,11 @@
 import { Chip } from "@heroui/react";
+import { t } from "@/i18n";
 
 const ACTIVE_STATUSES = new Set(["pending", "scheduled", "available", "running", "retryable"]);
 
 export function taskStatusLabel(status: string) {
-  return status.charAt(0).toUpperCase() + status.slice(1);
+  // The status is an API enum; the capitalised form is the message key.
+  return t(status.charAt(0).toUpperCase() + status.slice(1));
 }
 
 export function TaskStatusChip({ status, animate = true }: { status: string; animate?: boolean }) {

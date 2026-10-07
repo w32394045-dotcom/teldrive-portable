@@ -16,7 +16,7 @@ import type { components } from "@/api/schema";
 import { $api as api, fetchClient } from "@/api/client";
 import { queryClient } from "@/api/query-client";
 import { invalidateTaskQueries } from "@/api/tasks";
-import { t } from "@/i18n";
+import { t, tIdentifier } from "@/i18n";
 
 type TaskOut = components["schemas"]["Job"];
 type TaskAttemptError = components["schemas"]["JobAttemptError"];
@@ -126,7 +126,7 @@ function TaskDetailPage() {
               {task.description ?? defaultTaskDescription(task)}
             </Typography>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-              <span className="font-medium text-foreground">{task.type}</span>
+              <span className="font-medium text-foreground">{tIdentifier(task.type)}</span>
               <span className="font-mono">ID {task.id}</span>
               {task.parentId && (
                 <Link
@@ -605,7 +605,7 @@ function statusSummary(status: string) {
 }
 
 function defaultTaskDescription(task: TaskOut) {
-  return task.type;
+  return tIdentifier(task.type);
 }
 
 function hasJsonValue(value: unknown) {

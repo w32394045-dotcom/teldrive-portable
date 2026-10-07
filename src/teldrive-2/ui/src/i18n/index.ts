@@ -119,7 +119,7 @@ function interpolate(message: string, vars?: Record<string, string | number>): s
 /** Translate a message; unknown keys fall back to the English source text. */
 export function t(key: string, vars?: Record<string, string | number>): string {
   const catalog = catalogs[current];
-  const message = (catalog && catalog[key]) || key;
+  const message = catalog?.[key] || key;
   return interpolate(message, vars);
 }
 
@@ -135,8 +135,25 @@ export function tPlural(key: string, count: number, vars?: Record<string, string
   return interpolate(message, { count, ...vars });
 }
 
-/** Subscribe a component to locale changes. */
-export function useLocale(): Locale {
+/**
+ * Renders a machine identifier — a River job kind such as
+ * `teldrive_cleanup_trash`, or a task type — as readable text ("Cleanup Trash")
+ * and translates it when a message exists. Identifiers are not message keys, so
+ * an untranslated one degrades to readable words instead of leaking a raw slug
+ * into a translated page.
+ */
+export function tIdentifier(value: string | null | undefined): string {
+  if (!value) return "";
+  const label = value
+    .replace(/^teldrive[._-]?/i, "")
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b[a-z]/g, (character) => character.toUpperCase());
+  return t(label);
+}
+
+/** Subscribe a component to locale changes. */export function useLocale(): Locale {
   return useSyncExternalStore(subscribeLocale, getLocale, () => "en" as Locale);
 }
 

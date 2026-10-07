@@ -89,7 +89,7 @@ function UsersSettings() {
                     variant="tertiary"
                     color={owner ? "accent" : user.role === "admin" ? "warning" : "default"}
                   >
-                    {user.role}
+                    {t(user.role.charAt(0).toUpperCase() + user.role.slice(1))}
                   </Chip>
                   {user.disabled ? (
                     <Chip variant="tertiary" color="danger">

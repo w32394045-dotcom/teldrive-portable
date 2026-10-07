@@ -3,12 +3,19 @@ package telegramstore
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"strings"
+	"time"
 
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
+)
+
+const (
+	retryBaseDelay = 250 * time.Millisecond
+	retryMaxDelay  = 5 * time.Second
 )
 
 var transientTelegramErrors = []string{
@@ -41,10 +48,40 @@ func (m retryMiddleware) Handle(next tg.Invoker) telegram.InvokeFunc {
 			if attempt >= m.max || !isTransientTelegramError(err) {
 				return err
 			}
-			if ctx.Err() != nil {
-				return ctx.Err()
+			// Retrying a server-busy error immediately burns the whole retry
+			// budget in milliseconds and is itself a good way to earn a
+			// FLOOD_WAIT, so back off with jitter between attempts and stop as
+			// soon as the caller's context ends.
+			if sleepErr := sleepWithContext(ctx, retryBackoff(attempt)); sleepErr != nil {
+				return sleepErr
 			}
 		}
+	}
+}
+
+// retryBackoff grows from retryBaseDelay to retryMaxDelay and returns a value in
+// [delay/2, delay]. The jitter keeps parts retried in parallel from marching in
+// lockstep and re-triggering the same congestion.
+func retryBackoff(attempt int) time.Duration {
+	delay := retryBaseDelay
+	for i := 0; i < attempt && delay < retryMaxDelay; i++ {
+		delay *= 2
+	}
+	if delay > retryMaxDelay {
+		delay = retryMaxDelay
+	}
+	half := delay / 2
+	return half + time.Duration(rand.Int64N(int64(half)+1))
+}
+
+func sleepWithContext(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 

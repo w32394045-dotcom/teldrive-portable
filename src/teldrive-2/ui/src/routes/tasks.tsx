@@ -15,7 +15,7 @@ import type { components } from "@/api/schema";
 import { $api as api, fetchClient } from "@/api/client";
 import { queryClient } from "@/api/query-client";
 import { invalidateTaskQueries } from "@/api/tasks";
-import { t } from "@/i18n";
+import { t, tIdentifier } from "@/i18n";
 
 type TaskOut = components["schemas"]["Job"];
 type TaskCounts = components["schemas"]["JobStatistics"];
@@ -416,7 +416,7 @@ function TaskRow({
   retryPending: boolean;
   deletePending: boolean;
 }) {
-  const title = `${task.type} #${task.id}`;
+  const title = `${tIdentifier(task.type)} #${task.id}`;
   const canRetry = ["cancelled", "discarded", "retryable"].includes(task.status);
 
   return (

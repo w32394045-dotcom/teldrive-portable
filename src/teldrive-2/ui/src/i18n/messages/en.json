@@ -1,14 +1,16 @@
 {
- "{{count}} items moved to trash.one": "{{count}} item moved to trash",
- "{{count}} download links copied.one": "{{count}} download link copied",
- "Paste {{count}} clipboard items.one": "Paste {{count}} clipboard item",
- "{{count}} files completed.one": "{{count}} file completed",
- "Move {{count}} items.one": "Move {{count}} item",
  "Copy {{count}} items.one": "Copy {{count}} item",
- "{{count}} items.one": "{{count}} item",
+ "Move {{count}} items.one": "Move {{count}} item",
+ "Paste {{count}} clipboard items.one": "Paste {{count}} clipboard item",
+ "{{count}} attempts.one": "{{count}} attempt",
+ "{{count}} download links copied.one": "{{count}} download link copied",
+ "{{count}} files completed.one": "{{count}} file completed",
  "{{count}} files.one": "{{count}} file",
+ "{{count}} folders.one": "{{count}} folder",
+ "{{count}} items moved to trash.one": "{{count}} item moved to trash",
+ "{{count}} items.one": "{{count}} item",
  "{{count}} parts.one": "{{count}} part",
  "{{count}} results.one": "{{count}} result",
- "{{count}} attempts.one": "{{count}} attempt",
- "{{count}} selected.one": "{{count}} selected"
+ "{{count}} selected.one": "{{count}} selected",
+ "{{count}} sessions.one": "{{count}} session"
 }

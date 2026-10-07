@@ -13,7 +13,10 @@ import (
 
 func TestExpandHomePath(t *testing.T) {
 	home := t.TempDir()
+	// os.UserHomeDir reads %USERPROFILE% on Windows and $HOME elsewhere, so the
+	// test must pin both or it resolves the real profile on Windows.
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	got, err := expandHomePath("~/cache")
 	if err != nil {

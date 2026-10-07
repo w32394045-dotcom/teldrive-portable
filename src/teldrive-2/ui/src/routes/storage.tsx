@@ -7,7 +7,7 @@ import { queryClient } from "@/api/query-client";
 import type { components } from "@/api/schema";
 import { LinkButton } from "@/components/link-button";
 import { Page, PageHeader } from "@/components/page";
-import { t } from "@/i18n";
+import { t, tPlural } from "@/i18n";
 
 type StorageActivity = components["schemas"]["StorageActivity"];
 type StorageGrowthPoint = components["schemas"]["StorageGrowthPoint"];
@@ -69,17 +69,23 @@ function StoragePage() {
         <StatCard
           label={t("Active files")}
           value={summary.activeFiles.toLocaleString()}
-          detail={`${summary.activeFolders.toLocaleString()} folders`}
+          detail={tPlural("{{count}} folders", summary.activeFolders, {
+            count: summary.activeFolders.toLocaleString(),
+          })}
         />
         <StatCard
           label={t("Trash")}
           value={formatBytes(summary.trashBytes)}
-          detail={`${summary.trashedFiles.toLocaleString()} files`}
+          detail={tPlural("{{count}} files", summary.trashedFiles, {
+            count: summary.trashedFiles.toLocaleString(),
+          })}
         />
         <StatCard
           label={t("Channels")}
           value={configuredChannels.toLocaleString()}
-          detail={`${selectedChannels.toLocaleString()} selected`}
+          detail={tPlural("{{count}} selected", selectedChannels, {
+            count: selectedChannels.toLocaleString(),
+          })}
         />
         <StatCard
           label={t("Reclaimable")}
@@ -121,14 +127,21 @@ function StoragePage() {
                 <div key={category.category} className="grid gap-2">
                   <div className="flex items-center justify-between gap-4 text-sm">
                     <span className="font-medium">
-                      {CATEGORY_LABELS[category.category] ?? category.category}
+                      {t(CATEGORY_LABELS[category.category] ?? category.category)}
                     </span>
                     <span className="text-muted">
-                      {formatBytes(category.totalSize)} · {category.totalFiles.toLocaleString()}{" "}
-                      files
+                      {formatBytes(category.totalSize)} ·{" "}
+                      {tPlural("{{count}} files", category.totalFiles, {
+                        count: category.totalFiles.toLocaleString(),
+                      })}
                     </span>
                   </div>
-                  <ProgressTrack value={percent} label={`${category.category} storage`} />
+                  <ProgressTrack
+                    value={percent}
+                    label={t("{{category}} storage", {
+                      category: t(CATEGORY_LABELS[category.category] ?? category.category),
+                    })}
+                  />
                 </div>
               );
             })}
@@ -201,7 +214,9 @@ function StoragePage() {
             <MetricRow
               label={t("Stale multipart uploads")}
               value={formatBytes(data.cleanup.staleUploadBytes)}
-              detail={`${data.cleanup.staleUploads.toLocaleString()} sessions`}
+              detail={tPlural("{{count}} sessions", data.cleanup.staleUploads, {
+                count: data.cleanup.staleUploads.toLocaleString(),
+              })}
             />
             <MetricRow
               label={t("Total reclaimable")}
@@ -296,7 +311,7 @@ function ActivityRow({ activity }: { activity: StorageActivity }) {
   return (
     <div className="flex items-start justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
-        <div className="text-sm font-medium">{ACTIVITY_LABELS[activity.type] ?? activity.type}</div>
+        <div className="text-sm font-medium">{t(ACTIVITY_LABELS[activity.type] ?? activity.type)}</div>
         <div className="truncate text-xs text-muted">{activity.label}</div>
       </div>
       <time className="shrink-0 text-xs text-muted" dateTime={activity.occurredAt}>
@@ -392,5 +407,5 @@ function formatRelative(value: string) {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return t("{{hours}}h ago", { hours });
   const days = Math.floor(hours / 24);
-  return days < 7 ? `${days}d ago` : new Date(value).toLocaleDateString();
+  return days < 7 ? t("{{days}}d ago", { days }) : new Date(value).toLocaleDateString();
 }
