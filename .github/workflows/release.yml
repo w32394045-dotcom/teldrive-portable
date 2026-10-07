@@ -89,18 +89,33 @@ jobs:
           path: ${{ env.ZIP }}
           if-no-files-found: error
 
+      - name: Diagnose token and repo
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh --version
+          gh api "repos/$env:GH_REPO" --jq '{private, permissions}' 2>&1
+          gh auth status 2>&1
+
       - name: Publish release asset
         if: github.ref_type == 'tag'
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
+          $ErrorActionPreference = 'Continue'
           $tag = $env:GITHUB_REF_NAME
-          gh release view $tag --json tagName --jq .tagName 2>$null | Out-Null
+          $notes = "CI 在 windows-latest 上从源码构建的 Windows 一键运行包。解压后双击 start.bat：首次启动会自动生成随机密钥、初始化内置 PostgreSQL，并在端口就绪后打开浏览器。详见仓库 README。"
+          Write-Host "publishing $tag (asset $env:ZIP)"
+          gh release view $tag --json tagName --jq .tagName 2>&1 | Out-Host
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag `
-              --title "teldrive 一键运行包 $tag" `
-              --notes "CI 在 windows-latest 上从源码构建的 Windows 一键运行包。解压后双击 ``start.bat``；首次启动会自动生成随机密钥、初始化内置 PostgreSQL 并打开浏览器。详见仓库 README。"
+            gh release create $tag --title "teldrive 一键运行包 $tag" --notes $notes
+            if ($LASTEXITCODE -ne 0) { Write-Error "gh release create failed ($LASTEXITCODE)"; exit 1 }
           }
           gh release upload $tag $env:ZIP --clobber
-          gh release view $tag --json assets --jq '.assets[] | \"\(.name) \(.size) bytes\"'
+          if ($LASTEXITCODE -ne 0) { Write-Error "gh release upload failed ($LASTEXITCODE)"; exit 1 }
+          gh release view $tag --json assets --jq '.assets[] | "\(.name) \(.size) bytes"'
