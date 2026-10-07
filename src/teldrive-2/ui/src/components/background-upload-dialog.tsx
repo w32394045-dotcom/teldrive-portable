@@ -16,6 +16,7 @@ import type { components } from "@/api/schema";
 import { fetchClient } from "@/api/client";
 import { newClientId } from "@/features/shared/client-id";
 import { AppDialog } from "./dialogs/app-dialog";
+import { t } from "@/i18n";
 
 type ImportSource = components["schemas"]["UploadImportSource"];
 type ImportRequest = components["schemas"]["UploadImportRequest"];
@@ -130,7 +131,7 @@ export function BackgroundUploadDialog({
       setSubmitting(true);
       const { error } = await fetchClient.POST("/v1/uploads/imports", { body });
       if (error) throw new Error("The server rejected the background upload");
-      toast.success("Background upload queued");
+      toast.success(t("Background upload queued"));
       reset();
       onOpenChange(false);
     } catch (error) {
@@ -145,27 +146,27 @@ export function BackgroundUploadDialog({
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
       isDismissable={!submitting}
-      title="Background upload"
-      description={`Import server paths and remote URLs into ${currentPath}.`}
+      title={t("Background upload")}
+      description={t("Import server paths and remote URLs into {{currentPath}}.", { currentPath })}
       className="min-w-0 sm:w-[min(94vw,46rem)] sm:max-w-none bg-surface"
       bodyClassName="p-0"
       footer={
         <>
           <Button variant="secondary" isDisabled={submitting} onPress={close}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button variant="primary" isPending={submitting} onPress={() => void queueUpload()}>
-            Queue upload
+            {t("Queue upload")}
           </Button>
         </>
       }
     >
       <div className="grid gap-4 p-4 sm:p-5">
         <TextField value={destination} onChange={setDestination} isRequired>
-          <Label>Destination</Label>
-          <Input placeholder="/Movies/Incoming or a folder UUID" />
+          <Label>{t("Destination")}</Label>
+          <Input placeholder={t("/Movies/Incoming or a folder UUID")} />
           <div className="mt-1 text-xs text-muted">
-            Enter an absolute drive path from root or an existing folder UUID.
+            {t("Enter an absolute drive path from root or an existing folder UUID.")}
           </div>
         </TextField>
 
@@ -181,7 +182,7 @@ export function BackgroundUploadDialog({
                     Source {index + 1}
                   </div>
                   <div className="mt-0.5 text-xs text-muted">
-                    {source.type === "local" ? "Read from this server" : "Fetch over HTTP"}
+                    {source.type === "local" ? t("Read from this server") : t("Fetch over HTTP")}
                   </div>
                 </div>
                 <Button
@@ -206,7 +207,7 @@ export function BackgroundUploadDialog({
                     variant={source.type === type ? "secondary" : "ghost"}
                     onPress={() => patchSource(source.id, { type, location: "" })}
                   >
-                    {type === "local" ? "Local path" : "HTTP URL"}
+                    {type === "local" ? t("Local path") : "HTTP URL"}
                   </Button>
                 ))}
               </div>
@@ -216,7 +217,7 @@ export function BackgroundUploadDialog({
                   value={source.location}
                   onChange={(value) => patchSource(source.id, { location: value })}
                 >
-                  <Label>{source.type === "local" ? "Absolute server path" : "URL"}</Label>
+                  <Label>{source.type === "local" ? t("Absolute server path") : "URL"}</Label>
                   <Input
                     placeholder={
                       source.type === "local"
@@ -229,8 +230,8 @@ export function BackgroundUploadDialog({
                   value={source.destinationPath}
                   onChange={(value) => patchSource(source.id, { destinationPath: value })}
                 >
-                  <Label>Destination path</Label>
-                  <Input placeholder="Optional relative path" />
+                  <Label>{t("Destination path")}</Label>
+                  <Input placeholder={t("Optional relative path")} />
                 </TextField>
               </div>
 
@@ -238,7 +239,7 @@ export function BackgroundUploadDialog({
                 <Accordion.Item id={`source-options-${source.id}`}>
                   <Accordion.Heading>
                     <Accordion.Trigger className="rounded-lg text-xs font-medium text-muted hover:text-foreground">
-                      Source options
+                      {t("Source options")}
                       <Accordion.Indicator />
                     </Accordion.Trigger>
                   </Accordion.Heading>
@@ -246,7 +247,7 @@ export function BackgroundUploadDialog({
                     <Accordion.Body>
                       <div className="grid gap-3 border-border border-t pt-3 sm:grid-cols-2">
                         <TextField>
-                          <Label>Exclude patterns</Label>
+                          <Label>{t("Exclude patterns")}</Label>
                           <TextArea
                             value={source.exclude}
                             onChange={(event) =>
@@ -257,7 +258,7 @@ export function BackgroundUploadDialog({
                           />
                         </TextField>
                         <TextField isDisabled={source.type !== "http"}>
-                          <Label>HTTP headers</Label>
+                          <Label>{t("HTTP headers")}</Label>
                           <TextArea
                             value={source.headers}
                             onChange={(event) =>
@@ -277,7 +278,7 @@ export function BackgroundUploadDialog({
         </div>
 
         <Button variant="secondary" onPress={() => setSources((items) => [...items, newSource()])}>
-          <PlusIcon className="size-3.5" /> Add source
+          <PlusIcon className="size-3.5" /> {t("Add source")}
         </Button>
 
         <Accordion
@@ -288,7 +289,7 @@ export function BackgroundUploadDialog({
           <Accordion.Item id="advanced-settings">
             <Accordion.Heading>
               <Accordion.Trigger className="rounded-xl py-3 text-sm font-semibold">
-                Advanced settings
+                {t("Advanced settings")}
                 <Accordion.Indicator />
               </Accordion.Trigger>
             </Accordion.Heading>
@@ -297,15 +298,15 @@ export function BackgroundUploadDialog({
                 <div className="grid gap-4 border-border border-t py-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <TextField value={minSize} onChange={setMinSize}>
-                      <Label>Minimum size</Label>
-                      <Input placeholder="For example 10 MiB" />
+                      <Label>{t("Minimum size")}</Label>
+                      <Input placeholder={t("For example 10 MiB")} />
                     </TextField>
                     <TextField value={maxSize} onChange={setMaxSize}>
-                      <Label>Maximum size</Label>
-                      <Input placeholder="For example 20 GiB" />
+                      <Label>{t("Maximum size")}</Label>
+                      <Input placeholder={t("For example 20 GiB")} />
                     </TextField>
                     <NumberField
-                      aria-label="Chunk size in MiB"
+                      aria-label={t("Chunk size in MiB")}
                       value={chunkSizeMiB}
                       minValue={64}
                       maxValue={2000}
@@ -313,7 +314,7 @@ export function BackgroundUploadDialog({
                         setChunkSizeMiB(Math.max(64, Math.min(2000, value ?? 512)))
                       }
                     >
-                      <Label>Chunk size (MiB)</Label>
+                      <Label>{t("Chunk size (MiB)")}</Label>
                       <NumberField.Group>
                         <NumberField.DecrementButton />
                         <NumberField.Input />
@@ -322,7 +323,7 @@ export function BackgroundUploadDialog({
                       </NumberField.Group>
                     </NumberField>
                     <NumberField
-                      aria-label="Concurrent upload parts"
+                      aria-label={t("Concurrent upload parts")}
                       value={partConcurrency}
                       minValue={1}
                       maxValue={16}
@@ -330,7 +331,7 @@ export function BackgroundUploadDialog({
                         setPartConcurrency(Math.max(1, Math.min(16, value ?? 4)))
                       }
                     >
-                      <Label>Concurrent parts</Label>
+                      <Label>{t("Concurrent parts")}</Label>
                       <NumberField.Group>
                         <NumberField.DecrementButton />
                         <NumberField.Input />
@@ -340,7 +341,7 @@ export function BackgroundUploadDialog({
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <TextField>
-                      <Label>Batch exclusions</Label>
+                      <Label>{t("Batch exclusions")}</Label>
                       <TextArea
                         value={exclude}
                         onChange={(event) => setExclude(event.currentTarget.value)}
@@ -349,7 +350,7 @@ export function BackgroundUploadDialog({
                       />
                     </TextField>
                     <TextField>
-                      <Label>Default HTTP headers</Label>
+                      <Label>{t("Default HTTP headers")}</Label>
                       <TextArea
                         value={headers}
                         onChange={(event) => setHeaders(event.currentTarget.value)}
@@ -363,7 +364,7 @@ export function BackgroundUploadDialog({
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                      <Label>Encrypt uploaded files</Label>
+                      <Label>{t("Encrypt uploaded files")}</Label>
                     </Switch.Content>
                   </Switch>
                 </div>

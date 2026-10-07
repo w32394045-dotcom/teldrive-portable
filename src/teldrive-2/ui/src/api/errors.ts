@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 export type ApiErrorDetails = Record<string, unknown>;
 
 export class ApiError extends Error {
@@ -100,32 +101,32 @@ export function userMessage(error: unknown): string {
   const normalized = normalizeApiError(error);
   switch (normalized.status) {
     case 0:
-      return "Teldrive could not reach the server. Check your connection and try again.";
+      return t("Teldrive could not reach the server. Check your connection and try again.");
     case 400:
       return normalized.message || "The request was not valid.";
     case 401:
-      return "Your sign-in has expired. Sign in again to continue.";
+      return t("Your sign-in has expired. Sign in again to continue.");
     case 403:
-      return "You do not have permission to perform this action.";
+      return t("You do not have permission to perform this action.");
     case 404:
-      return "The requested item no longer exists.";
+      return t("The requested item no longer exists.");
     case 409:
       return normalized.message || "That change conflicts with an existing item.";
     case 410:
-      return "This upload or share has expired.";
+      return t("This upload or share has expired.");
     case 412:
-      return "This item changed on another device. Refresh before trying again.";
+      return t("This item changed on another device. Refresh before trying again.");
     case 413:
-      return "The selected file is larger than the server allows.";
+      return t("The selected file is larger than the server allows.");
     case 416:
-      return "The requested file range is not available.";
+      return t("The requested file range is not available.");
     case 422:
       return normalized.message || "Some values need to be corrected.";
     case 429:
-      return "Teldrive is receiving too many requests. Try again shortly.";
+      return t("Teldrive is receiving too many requests. Try again shortly.");
     default:
       return normalized.status >= 500
-        ? "Teldrive encountered a server error. Your data was not changed."
+        ? t("Teldrive encountered a server error. Your data was not changed.")
         : normalized.message;
   }
 }

@@ -35,6 +35,7 @@ import {
   invalidSearchDates,
   type SearchState,
 } from "./search-state";
+import { t } from "@/i18n";
 
 type FileBrowserView = "list" | "grid";
 type PaneId = "primary" | "secondary";
@@ -268,9 +269,9 @@ export function FileManagerPage({
       await fileActions.createFolder(name, activeLocation.parentId);
       setFolderName("");
       setFolderDialogOpen(false);
-      toast.success("Folder created");
+      toast.success(t("Folder created"));
     } catch (error) {
-      toast.error("Folder could not be created", { description: userMessage(error) });
+      toast.error(t("Folder could not be created"), { description: userMessage(error) });
     }
   };
 
@@ -335,9 +336,9 @@ export function FileManagerPage({
     try {
       await fileActions.copy(file, paneLocation(pane).parentId, `${file.name} copy`, "rename");
       setPaneSelectedKeys(pane, new Set());
-      toast.success("Item duplicated");
+      toast.success(t("Item duplicated"));
     } catch (error) {
-      toast.error("Item could not be duplicated", { description: userMessage(error) });
+      toast.error(t("Item could not be duplicated"), { description: userMessage(error) });
     }
   };
 
@@ -388,7 +389,7 @@ export function FileManagerPage({
     if (!clipboardMode || clipboardItems.length === 0) return;
     const location = paneLocation(pane);
     if (clipboardMode === "cut" && clipboardSourceParentId === location.parentId) {
-      toast.info("Items are already in this folder");
+      toast.info(t("Items are already in this folder"));
       return;
     }
     try {
@@ -415,7 +416,7 @@ export function FileManagerPage({
         setPasteConflictPane(pane);
         return;
       }
-      toast.error("Clipboard items could not be pasted", { description: userMessage(error) });
+      toast.error(t("Clipboard items could not be pasted"), { description: userMessage(error) });
     }
   };
 
@@ -537,7 +538,7 @@ export function FileManagerPage({
         `${selectedFiles.length} download link${selectedFiles.length === 1 ? "" : "s"} copied`,
       );
     } catch (error) {
-      toast.error("Download links could not be copied", { description: userMessage(error) });
+      toast.error(t("Download links could not be copied"), { description: userMessage(error) });
     }
   };
 
@@ -555,7 +556,7 @@ export function FileManagerPage({
             isIconOnly
             size="sm"
             variant="secondary"
-            aria-label="Open split view"
+            aria-label={t("Open split view")}
             onPress={openSplitView}
           >
             <SplitIcon className="size-4" />
@@ -565,7 +566,7 @@ export function FileManagerPage({
             isIconOnly
             size="sm"
             variant="ghost"
-            aria-label="Close split view"
+            aria-label={t("Close split view")}
             onPress={closeSplitView}
           >
             <SplitIcon className="size-4" />
@@ -575,7 +576,7 @@ export function FileManagerPage({
           isIconOnly
           size="sm"
           variant="secondary"
-          aria-label="New folder"
+          aria-label={t("New folder")}
           onPress={() => {
             setActivePane(pane);
             setFolderDialogOpen(true);
@@ -584,12 +585,12 @@ export function FileManagerPage({
           <PlusIcon className="size-4" />
         </Button>
         <Dropdown>
-          <Button isIconOnly size="sm" variant="primary" aria-label="Upload">
+          <Button isIconOnly size="sm" variant="primary" aria-label={t("Upload")}>
             <UploadIcon className="size-4" />
           </Button>
           <Dropdown.Popover className="min-w-52">
             <Dropdown.Menu
-              aria-label="Upload"
+              aria-label={t("Upload")}
               onAction={(key) => {
                 setActivePane(pane);
                 if (key === "files") uploadFilesTriggerRef.current?.click();
@@ -597,18 +598,18 @@ export function FileManagerPage({
                 if (key === "background") setBackgroundUploadOpen(true);
               }}
             >
-              <Dropdown.Item id="files" textValue="Upload files">
+              <Dropdown.Item id="files" textValue={t("Upload files")}>
                 <FileIcon className="size-4" />
-                <Label>Upload files</Label>
+                <Label>{t("Upload files")}</Label>
               </Dropdown.Item>
-              <Dropdown.Item id="folder" textValue="Upload folder">
+              <Dropdown.Item id="folder" textValue={t("Upload folder")}>
                 <FolderIcon className="size-4" />
-                <Label>Upload folder</Label>
+                <Label>{t("Upload folder")}</Label>
               </Dropdown.Item>
               {canLocalImport ? (
-                <Dropdown.Item id="background" textValue="Background upload">
+                <Dropdown.Item id="background" textValue={t("Background upload")}>
                   <UploadIcon className="size-4" />
-                  <Label>Background upload</Label>
+                  <Label>{t("Background upload")}</Label>
                 </Dropdown.Item>
               ) : null}
             </Dropdown.Menu>
@@ -621,7 +622,7 @@ export function FileManagerPage({
               if (list?.length) enqueue(Array.from(list), location.parentId, location.path);
             }}
           >
-            <Button ref={uploadFilesTriggerRef}>Choose upload files</Button>
+            <Button ref={uploadFilesTriggerRef}>{t("Choose upload files")}</Button>
           </FileTrigger>
           <FileTrigger
             acceptDirectory
@@ -630,7 +631,7 @@ export function FileManagerPage({
               if (list?.length) enqueue(Array.from(list), location.parentId, location.path);
             }}
           >
-            <Button ref={uploadFolderTriggerRef}>Choose upload folder</Button>
+            <Button ref={uploadFolderTriggerRef}>{t("Choose upload folder")}</Button>
           </FileTrigger>
         </span>
       </>
@@ -671,7 +672,7 @@ export function FileManagerPage({
               isIconOnly
               size="sm"
               variant="ghost"
-              aria-label={clipboardMode === "cut" ? "Cancel cut" : "Clear copied items"}
+              aria-label={clipboardMode === "cut" ? t("Cancel cut") : t("Clear copied items")}
               onPress={clearClipboard}
             >
               <CloseIcon className="size-4" />
@@ -720,7 +721,7 @@ export function FileManagerPage({
       <FileBrowser
         files={files}
         path={location.path}
-        rootLabel={searchMode ? "Search results" : "My files"}
+        rootLabel={searchMode ? t("Search results") : t("My files")}
         view={location.view}
         loading={fileQuery.isPending}
         onNavigatePath={(path) => navigatePane(pane, { path, query: "", view: location.view })}
@@ -746,8 +747,8 @@ export function FileManagerPage({
         dimmedIds={cutIds}
         hideFolderControls={Boolean(searchMode)}
         showLocations={Boolean(searchMode)}
-        emptyTitle={searchMode ? "No matching files" : undefined}
-        emptyHint={searchMode ? "Try another name or adjust your filters." : undefined}
+        emptyTitle={searchMode ? t("No matching files") : undefined}
+        emptyHint={searchMode ? t("Try another name or adjust your filters.") : undefined}
         onOpenContainingFolder={
           searchMode
             ? (file) => {
@@ -775,7 +776,7 @@ export function FileManagerPage({
       <div data-testid={`file-pane-${pane}`} className="flex min-h-0 min-w-0 flex-1 rounded-xl">
         <DropZone
           data-testid={pane === "primary" ? "file-drop-zone" : "file-drop-zone-secondary"}
-          aria-label={`Upload files into ${location.path}`}
+          aria-label={t("Upload files into {{path}}", { path: location.path })}
           getDropOperation={() => "copy"}
           className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden outline-none"
           onDrop={async (event) => {
@@ -788,9 +789,7 @@ export function FileManagerPage({
           {({ isDropTarget }) => (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden">
               {isDropTarget ? (
-                <div className="shrink-0 rounded-xl border-2 border-dashed border-accent bg-accent/10 px-4 py-4 text-center text-sm font-medium text-accent sm:px-6 sm:py-6">
-                  Drop files to upload into {location.path}
-                </div>
+                <div className="shrink-0 rounded-xl border-2 border-dashed border-accent bg-accent/10 px-4 py-4 text-center text-sm font-medium text-accent sm:px-6 sm:py-6">{t("Drop files to upload into {{path}}", { path: location.path })}</div>
               ) : null}
               {browser}
             </div>
@@ -812,7 +811,7 @@ export function FileManagerPage({
       )}
       {searchMode && activeSearch && !missingFolder && !invalidDates && (
         <p aria-live="polite" className="text-xs text-muted">
-          {primaryFileQuery.isFetching ? "Updating results…" : `${primaryFiles.length} loaded`}
+          {primaryFileQuery.isFetching ? t("Updating results…") : `${primaryFiles.length} loaded`}
         </p>
       )}
       <PageContent className="flex min-h-0 flex-1 overflow-x-hidden">
@@ -821,8 +820,8 @@ export function FileManagerPage({
             <div role="alert" className="mb-3 rounded-xl border border-danger/30 p-4 text-sm">
               <p className="font-medium">
                 {primaryFileQuery.isFetchNextPageError
-                  ? "More results could not be loaded."
-                  : "Search could not be completed."}
+                  ? t("More results could not be loaded.")
+                  : t("Search could not be completed.")}
               </p>
               <p className="mt-1 text-muted">{userMessage(primaryFileQuery.error)}</p>
               <Button
@@ -836,7 +835,7 @@ export function FileManagerPage({
                     : primaryFileQuery.refetch())
                 }
               >
-                Retry
+                {t("Retry")}
               </Button>
             </div>
           )}
@@ -844,21 +843,21 @@ export function FileManagerPage({
             <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-dashed border-border p-8 text-center">
               <p className="text-lg font-semibold">
                 {missingFolder
-                  ? "Choose a folder to search recursively"
+                  ? t("Choose a folder to search recursively")
                   : invalidDates
                     ? "Check the modified-date range"
                     : "Find anything in your drive"}
               </p>
               <p className="mt-2 text-sm text-muted">
                 {missingFolder
-                  ? "This saved search has no folder selected."
+                  ? t("This saved search has no folder selected.")
                   : invalidDates
                     ? "Start date must be before end date."
                     : "Search by filename, or apply filters to explore."}
               </p>
               {(missingFolder || invalidDates) && (
                 <Button variant="secondary" className="mt-3" onPress={() => setFiltersOpen(true)}>
-                  {missingFolder ? "Choose folder" : "Edit filters"}
+                  {missingFolder ? t("Choose folder") : t("Edit filters")}
                 </Button>
               )}
             </div>
@@ -880,20 +879,20 @@ export function FileManagerPage({
       <AppDialog
         open={folderDialogOpen}
         onOpenChange={setFolderDialogOpen}
-        title="Create folder"
-        description={`Create a folder inside ${activeLocation.path}.`}
+        title={t("Create folder")}
+        description={t("Create a folder inside {{path}}.", { path: activeLocation.path })}
         size="md"
         footer={
           <>
             <Button variant="secondary" onPress={() => setFolderDialogOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               variant="primary"
               isDisabled={!folderName.trim() || fileActions.pending}
               onPress={() => void createFolder()}
             >
-              Create folder
+              {t("Create folder")}
             </Button>
           </>
         }
@@ -909,8 +908,8 @@ export function FileManagerPage({
             } else event.continuePropagation();
           }}
         >
-          <Label>Folder name</Label>
-          <Input placeholder="New folder" />
+          <Label>{t("Folder name")}</Label>
+          <Input placeholder={t("New folder")} />
         </TextField>
       </AppDialog>
 
@@ -959,13 +958,13 @@ export function FileManagerPage({
         onOpenChange={(open) => {
           if (!open) setPasteConflictPane(undefined);
         }}
-        title="Item already exists"
-        description="The destination already contains an item with the same name."
+        title={t("Item already exists")}
+        description={t("The destination already contains an item with the same name.")}
         size="md"
         footer={
           <>
             <Button variant="secondary" onPress={() => setPasteConflictPane(undefined)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               variant="secondary"
@@ -974,7 +973,7 @@ export function FileManagerPage({
                 if (pasteConflictPane) void pasteClipboard(pasteConflictPane, "rename");
               }}
             >
-              Keep both
+              {t("Keep both")}
             </Button>
             <Button
               variant="danger"
@@ -983,13 +982,13 @@ export function FileManagerPage({
                 if (pasteConflictPane) void pasteClipboard(pasteConflictPane, "replace");
               }}
             >
-              Replace
+              {t("Replace")}
             </Button>
           </>
         }
       >
         <p className="text-sm text-muted">
-          Replace the existing item, or keep both by giving the moved item a new name.
+          {t("Replace the existing item, or keep both by giving the moved item a new name.")}
         </p>
       </AppDialog>
     </Page>

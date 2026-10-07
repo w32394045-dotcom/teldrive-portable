@@ -21,6 +21,7 @@ import { userMessage } from "@/api/errors";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
 import { currentUserQueryOptions } from "@/auth/queries";
+import { t } from "@/i18n";
 
 type Step = "phone" | "code" | "password";
 type Flow = {
@@ -83,7 +84,7 @@ function LoginPage() {
     const qc = getQueryClient();
     await qc.invalidateQueries({ queryKey: query.queryKey });
     await qc.ensureQueryData(query);
-    toast.success("Signed in to Teldrive");
+    toast.success(t("Signed in to Teldrive"));
     await navigate({ to: redirect, replace: true });
   };
 
@@ -113,7 +114,7 @@ function LoginPage() {
       });
       if (isSession(result)) await finish();
     } catch (error) {
-      toast.error("Telegram sign-in failed", { description: userMessage(error) });
+      toast.error(t("Telegram sign-in failed"), { description: userMessage(error) });
     }
   };
 
@@ -152,12 +153,12 @@ function LoginPage() {
             if (state.qrExpiresAt) setQrExpiry(state.qrExpiresAt);
           } catch (error) {
             window.clearInterval(timer);
-            toast.error("QR sign-in stopped", { description: userMessage(error) });
+            toast.error(t("QR sign-in stopped"), { description: userMessage(error) });
           }
         }, 2500);
       })
       .catch((error) =>
-        toast.error("Unable to create QR sign-in", { description: userMessage(error) }),
+        toast.error(t("Unable to create QR sign-in"), { description: userMessage(error) }),
       );
     return () => {
       active = false;
@@ -169,27 +170,26 @@ function LoginPage() {
     <main className="grid min-h-dvh bg-background text-foreground lg:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
       <section className="hidden border-r border-border bg-sidebar/70 p-12 lg:flex lg:flex-col lg:justify-between">
         <div className="flex size-11 items-center justify-center rounded-xl bg-accent font-semibold text-accent-foreground">
-          TD
+          {t("TD")}
         </div>
         <div className="my-auto max-w-xl">
           <p className="mb-3 text-xs font-medium uppercase tracking-[0.16em] text-accent">
             Teldrive
           </p>
           <h1 className="text-4xl font-semibold tracking-tight">
-            Your Telegram-backed cloud drive.
+            {t("Your Telegram-backed cloud drive.")}
           </h1>
           <p className="mt-4 max-w-lg text-sm leading-6 text-muted">
-            Manage files, uploads, background jobs, channels, bots, sessions, and API access from
-            one focused interface.
+            {t("Manage files, uploads, background jobs, channels, bots, sessions, and API access from one focused interface.")}
           </p>
         </div>
       </section>
       <section className="flex items-center justify-center p-4 sm:p-8 lg:p-12">
         <Card className="w-full max-w-md border border-border bg-surface/90 shadow-xl">
           <Card.Header className="block px-6 pt-6">
-            <Card.Title>Sign in with Telegram</Card.Title>
+            <Card.Title>{t("Sign in with Telegram")}</Card.Title>
             <Card.Description>
-              API keys are reserved for rclone and external clients.
+              {t("API keys are reserved for rclone and external clients.")}
             </Card.Description>
           </Card.Header>
           <Card.Content className="space-y-5 px-6 pb-6">
@@ -201,19 +201,19 @@ function LoginPage() {
               }}
             >
               <Tabs.ListContainer>
-                <Tabs.List aria-label="Sign-in method">
+                <Tabs.List aria-label={t("Sign-in method")}>
                   <Tabs.Tab id="phone">
-                    <PhoneIcon className="size-4" /> Phone
+                    <PhoneIcon className="size-4" /> {t("Phone")}
                   </Tabs.Tab>
                   <Tabs.Tab id="qr">
-                    <QrIcon className="size-4" /> QR code
+                    <QrIcon className="size-4" /> {t("QR code")}
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
               <Tabs.Panel id="phone" className="space-y-4 pt-4">
                 {step === "phone" && (
                   <TextField className="grid gap-1" isInvalid={phoneInvalid}>
-                    <Label>Telegram phone number</Label>
+                    <Label>{t("Telegram phone number")}</Label>
                     <Input
                       autoFocus
                       placeholder={PHONE_EXAMPLE}
@@ -221,17 +221,15 @@ function LoginPage() {
                       onChange={(event) => setPhone(normalizePhone(event.target.value))}
                     />
                     {phoneInvalid ? (
-                      <FieldError>Start with + and the country code, e.g. {PHONE_EXAMPLE}</FieldError>
+                      <FieldError>{t("Start with + and the country code, e.g. {{PHONE_EXAMPLE}}", { PHONE_EXAMPLE })}</FieldError>
                     ) : (
-                      <Description>
-                        Include the country code, e.g. {PHONE_EXAMPLE}. Spaces and dashes are fine.
-                      </Description>
+                      <Description>{t("Include the country code, e.g. {{PHONE_EXAMPLE}}. Spaces and dashes are fine.", { PHONE_EXAMPLE })}</Description>
                     )}
                   </TextField>
                 )}
                 {step === "code" && (
                   <TextField className="grid gap-1">
-                    <Label>Telegram code</Label>
+                    <Label>{t("Telegram code")}</Label>
                     <Input
                       autoFocus
                       inputMode="numeric"
@@ -242,7 +240,7 @@ function LoginPage() {
                 )}
                 {step === "password" && (
                   <TextField className="grid gap-1">
-                    <Label>Two-step verification password</Label>
+                    <Label>{t("Two-step verification password")}</Label>
                     <Input
                       autoFocus
                       type="password"
@@ -264,7 +262,7 @@ function LoginPage() {
                   }
                 >
                   {pending ? <Spinner size="sm" /> : <ShieldIcon className="size-4" />}
-                  {step === "phone" ? "Send code" : "Verify and sign in"}
+                  {step === "phone" ? t("Send code") : t("Verify and sign in")}
                 </Button>
                 {step !== "phone" && (
                   <Button
@@ -277,22 +275,22 @@ function LoginPage() {
                       setPassword("");
                     }}
                   >
-                    Start again
+                    {t("Start again")}
                   </Button>
                 )}
               </Tabs.Panel>
               <Tabs.Panel id="qr" className="space-y-4 pt-4">
                 <div className="grid min-h-72 place-items-center rounded-xl border border-border bg-white p-5 text-black">
                   {qrUrl ? (
-                    <QRCodeSVG value={qrUrl} size={220} aria-label="Telegram sign-in QR code" />
+                    <QRCodeSVG value={qrUrl} size={220} aria-label={t("Telegram sign-in QR code")} />
                   ) : (
                     <Spinner size="lg" />
                   )}
                 </div>
                 <div className="text-center">
-                  <p className="font-medium">Scan with Telegram</p>
+                  <p className="font-medium">{t("Scan with Telegram")}</p>
                   <p className="mt-1 text-xs text-muted">
-                    Settings → Devices → Link Desktop Device
+                    {t("Settings → Devices → Link Desktop Device")}
                   </p>
                   <p className="mt-2 text-xs text-muted">
                     Expires {qrExpiry ? new Date(qrExpiry).toLocaleTimeString() : "soon"}

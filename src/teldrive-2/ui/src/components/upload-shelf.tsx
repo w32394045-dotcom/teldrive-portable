@@ -12,6 +12,7 @@ import PauseIcon from "~icons/gravity-ui/pause";
 import PlayIcon from "~icons/gravity-ui/play";
 import TrashIcon from "~icons/gravity-ui/trash-bin";
 import CloseIcon from "~icons/gravity-ui/xmark";
+import { t } from "@/i18n";
 
 type UploadNode = {
   id: string;
@@ -109,7 +110,7 @@ function TaskActions({ task }: { task: UploadTask }) {
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label={`Pause ${task.name}`}
+          aria-label={t("Pause {{name}}", { name: task.name })}
           onPress={() => pause(task.id)}
         >
           <PauseIcon className="size-3.5" />
@@ -120,7 +121,7 @@ function TaskActions({ task }: { task: UploadTask }) {
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label={`Resume ${task.name}`}
+          aria-label={t("Resume {{name}}", { name: task.name })}
           onPress={() => retry(task.id)}
         >
           <PlayIcon className="size-3.5" />
@@ -131,7 +132,7 @@ function TaskActions({ task }: { task: UploadTask }) {
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label={`Cancel ${task.name}`}
+          aria-label={t("Cancel {{name}}", { name: task.name })}
           onPress={() => void cancel(task.id)}
         >
           <CloseIcon className="size-3.5" />
@@ -141,7 +142,7 @@ function TaskActions({ task }: { task: UploadTask }) {
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label={`Remove ${task.name}`}
+          aria-label={t("Remove {{name}}", { name: task.name })}
           onPress={() => remove(task.id)}
         >
           <TrashIcon className="size-3.5" />
@@ -204,7 +205,7 @@ function UploadTreeItem({ node, root = false }: { node: UploadNode; root?: boole
             </span>
             <span className="mt-0.5 block truncate text-[11px] text-muted">{detail}</span>
             <ProgressBar
-              aria-label={`${node.name} upload progress`}
+              aria-label={t("{{name}} upload progress", { name: node.name })}
               value={summary.progress}
               className="mt-1.5 h-1"
             />
@@ -250,7 +251,7 @@ export function UploadShelf() {
             <UploadIcon className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Uploads</p>
+            <p className="text-sm font-semibold">{t("Uploads")}</p>
             <p className="truncate text-[11px] text-muted">
               {active
                 ? `${active} active - ${summary.progress}% - ${formatBytes(summary.uploadedBytes)} of ${formatBytes(summary.totalBytes)}`
@@ -259,13 +260,13 @@ export function UploadShelf() {
             </p>
           </div>
           <Button size="sm" variant="ghost" onPress={clearCompleted}>
-            Clear
+            {t("Clear")}
           </Button>
           <Button
             isIconOnly
             size="sm"
             variant="ghost"
-            aria-label={expanded ? "Collapse uploads" : "Expand uploads"}
+            aria-label={expanded ? t("Collapse uploads") : t("Expand uploads")}
             onPress={() => setExpanded((value) => !value)}
           >
             {expanded ? (
@@ -276,11 +277,11 @@ export function UploadShelf() {
           </Button>
         </div>
       </Card.Header>
-      <ProgressBar aria-label="Overall upload progress" value={summary.progress} className="h-1" />
+      <ProgressBar aria-label={t("Overall upload progress")} value={summary.progress} className="h-1" />
       {expanded ? (
         <Card.Content className="max-h-[min(65vh,34rem)] overflow-y-auto px-2 pb-2">
           <Tree
-            aria-label="Upload queue"
+            aria-label={t("Upload queue")}
             defaultExpandedKeys={expandedKeys}
             className="outline-none"
           >

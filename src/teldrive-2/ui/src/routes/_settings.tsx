@@ -13,6 +13,7 @@ import UploadIcon from "~icons/gravity-ui/arrow-up-from-line";
 import CloseIcon from "~icons/gravity-ui/xmark";
 import ClockIcon from "~icons/gravity-ui/clock";
 import { currentUserQueryOptions } from "@/auth/queries";
+import { t } from "@/i18n";
 
 const SETTINGS_GROUPS = [
   {
@@ -79,10 +80,10 @@ function SettingsLayout() {
         <div className="sticky top-0 flex max-h-[calc(100dvh-7rem)] flex-col gap-5 overflow-y-auto border-r border-border pr-5">
           <div>
             <Typography type="h2" className="text-lg font-semibold">
-              Settings
+              {t("Settings")}
             </Typography>
             <Typography.Paragraph className="mt-1 text-xs text-muted">
-              Configure Teldrive and this browser.
+              {t("Configure Teldrive and this browser.")}
             </Typography.Paragraph>
           </div>
           <SettingsNavigation currentPath={location.pathname} groups={visibleGroups} />
@@ -95,14 +96,14 @@ function SettingsLayout() {
               {activeLabel ?? "Settings"}
             </Typography>
             <Typography.Paragraph className="text-xs text-muted">
-              Teldrive settings
+              {t("Teldrive settings")}
             </Typography.Paragraph>
           </div>
           <Button
             isIconOnly
             size="sm"
             variant="tertiary"
-            aria-label="Open settings navigation"
+            aria-label={t("Open settings navigation")}
             onPress={() => setMobileOpen(true)}
           >
             <MenuIcon className="size-4" />
@@ -115,16 +116,16 @@ function SettingsLayout() {
           <Modal.Dialog className="h-full rounded-none">
             <Modal.Header className="flex-row items-center justify-between border-b border-border">
               <div>
-                <Modal.Heading>Settings</Modal.Heading>
+                <Modal.Heading>{t("Settings")}</Modal.Heading>
                 <Typography.Paragraph className="text-xs text-muted">
-                  Choose a settings area.
+                  {t("Choose a settings area.")}
                 </Typography.Paragraph>
               </div>
               <Button
                 isIconOnly
                 size="sm"
                 variant="tertiary"
-                aria-label="Close settings navigation"
+                aria-label={t("Close settings navigation")}
                 onPress={() => setMobileOpen(false)}
               >
                 <CloseIcon className="size-4" />
@@ -154,7 +155,7 @@ function SettingsNavigation({
   onNavigate?: () => void;
 }) {
   return (
-    <nav aria-label="Settings navigation" className="flex flex-col gap-5">
+    <nav aria-label={t("Settings navigation")} className="flex flex-col gap-5">
       {groups.map((group, groupIndex) => (
         <div key={group.label} className="flex flex-col gap-1.5">
           {groupIndex > 0 ? <Separator className="mb-3" /> : null}

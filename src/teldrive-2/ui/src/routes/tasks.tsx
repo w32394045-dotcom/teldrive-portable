@@ -15,6 +15,7 @@ import type { components } from "@/api/schema";
 import { $api as api, fetchClient } from "@/api/client";
 import { queryClient } from "@/api/query-client";
 import { invalidateTaskQueries } from "@/api/tasks";
+import { t } from "@/i18n";
 
 type TaskOut = components["schemas"]["Job"];
 type TaskCounts = components["schemas"]["JobStatistics"];
@@ -214,10 +215,10 @@ function TasksPage() {
     });
     setRetryingId(null);
     if (error) {
-      toast.error("Failed to retry task");
+      toast.error(t("Failed to retry task"));
       return;
     }
-    toast.success("Task queued for retry");
+    toast.success(t("Task queued for retry"));
     refreshTasks();
   };
 
@@ -268,8 +269,8 @@ function TasksPage() {
   return (
     <Page>
       <PageHeader
-        title="Tasks"
-        description="Create, monitor, retry, and inspect background work."
+        title={t("Tasks")}
+        description={t("Create, monitor, retry, and inspect background work.")}
         actions={
           <Button
             size="sm"
@@ -277,7 +278,7 @@ function TasksPage() {
             className="bg-accent text-accent-foreground"
             onPress={() => setComposerOpen(true)}
           >
-            <AddIcon className="size-3.5" /> New Task
+            <AddIcon className="size-3.5" /> {t("New Task")}
           </Button>
         }
       />
@@ -295,8 +296,8 @@ function TasksPage() {
       <PageToolbar className="items-stretch">
         <div className="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center">
           <Input
-            aria-label="Search tasks"
-            placeholder="Search tasks by type, queue, path, or ID"
+            aria-label={t("Search tasks")}
+            placeholder={t("Search tasks by type, queue, path, or ID")}
             value={search.query}
             onChange={(event) => setSearch({ query: event.currentTarget.value })}
             className="min-w-0 flex-1"
@@ -321,7 +322,7 @@ function TasksPage() {
                     isDisabled={(taskStats?.[purgeStatus] ?? 0) === 0}
                     onPress={() => setCleanupStatus(purgeStatus)}
                   >
-                    <TrashIcon className="size-3.5" /> Clean
+                    <TrashIcon className="size-3.5" /> {t("Clean")}
                   </Button>
                 ) : null;
               })()}
@@ -332,17 +333,17 @@ function TasksPage() {
 
       <Card className="overflow-hidden p-0">
         <div className="flex items-center justify-between border-border border-b px-4 py-3">
-          <div className="text-sm font-semibold">Task activity</div>
+          <div className="text-sm font-semibold">{t("Task activity")}</div>
           {hasActiveTasks && (
             <span className="flex items-center gap-2 text-xs text-muted">
               <span className="size-2 animate-pulse rounded-full bg-accent" />
-              Live updates
+              {t("Live updates")}
             </span>
           )}
         </div>
         {filteredTasks.length > 0 ? (
           <ListBox
-            aria-label="Tasks"
+            aria-label={t("Tasks")}
             selectionMode="none"
             className="w-full min-w-0 divide-y divide-border overflow-hidden p-0"
           >
@@ -359,11 +360,11 @@ function TasksPage() {
           </ListBox>
         ) : (
           <EmptyState
-            title="No tasks match these filters"
-            description="Adjust the active filters or queue a new task."
+            title={t("No tasks match these filters")}
+            description={t("Adjust the active filters or queue a new task.")}
             action={
               <Button size="sm" variant="primary" onPress={() => setComposerOpen(true)}>
-                New Task
+                {t("New Task")}
               </Button>
             }
           />
@@ -378,13 +379,13 @@ function TasksPage() {
             isDisabled={cursorHistory.length === 0}
             onPress={goPrevious}
           >
-            <PrevIcon className="size-3.5" /> Previous
+            <PrevIcon className="size-3.5" /> {t("Previous")}
           </Button>
           <span className="min-w-20 text-center text-xs text-muted">
             Page {cursorHistory.length + 1}
           </span>
           <Button size="sm" variant="tertiary" isDisabled={!meta?.nextCursor} onPress={goNext}>
-            Next <NextIcon className="size-3.5" />
+            {t("Next")} <NextIcon className="size-3.5" />
           </Button>
         </div>
       )}
@@ -430,7 +431,7 @@ function TaskRow({
             <TaskStatusChip status={task.status} />
             {task.parentId ? (
               <Chip size="sm" variant="tertiary">
-                Child task
+                {t("Child task")}
               </Chip>
             ) : null}
           </div>
@@ -458,7 +459,7 @@ function TaskRow({
         </div>
 
         <div className="hidden lg:block">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted">Attempts</div>
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted">{t("Attempts")}</div>
           <div className="mt-1 text-xs font-semibold tabular-nums">
             {task.attempt ?? 0} / {task.maxAttempts || "—"}
           </div>
@@ -471,9 +472,9 @@ function TaskRow({
               variant="primary"
               isPending={retryPending}
               onPress={onRetry}
-              aria-label={`Retry ${title}`}
+              aria-label={t("Retry {{title}}", { title })}
             >
-              Retry
+              {t("Retry")}
             </Button>
           ) : null}
           {task.status === "running" ? (
@@ -482,9 +483,9 @@ function TaskRow({
               variant="danger-soft"
               isPending={deletePending}
               onPress={onDelete}
-              aria-label={`Cancel ${title}`}
+              aria-label={t("Cancel {{title}}", { title })}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
           ) : (
             <Button
@@ -493,7 +494,7 @@ function TaskRow({
               isIconOnly
               isPending={deletePending}
               onPress={onDelete}
-              aria-label={`Delete ${title}`}
+              aria-label={t("Delete {{title}}", { title })}
             >
               <TrashIcon className="size-3.5" />
             </Button>
@@ -517,7 +518,7 @@ function TaskStatusSelect({
 
   return (
     <Select
-      aria-label="Task status"
+      aria-label={t("Task status")}
       selectedKey={value}
       onSelectionChange={(key) => onChange(String(key))}
       className="w-44 shrink-0"
@@ -570,14 +571,14 @@ function QueueManager({ queues, onChanged }: { queues: TaskQueueOut[]; onChanged
   return (
     <Popover>
       <Button size="sm" variant="tertiary">
-        <FilterIcon className="size-3.5" /> Queues
+        <FilterIcon className="size-3.5" /> {t("Queues")}
       </Button>
       <Popover.Content placement="bottom end" offset={8} className="w-[min(92vw,28rem)]">
         <Popover.Dialog className="p-0">
           <div className="border-border border-b px-4 py-3">
-            <Popover.Heading className="text-sm font-semibold">Worker queues</Popover.Heading>
+            <Popover.Heading className="text-sm font-semibold">{t("Worker queues")}</Popover.Heading>
             <p className="mt-0.5 text-xs text-muted">
-              Pause or resume River queues without stopping workers.
+              {t("Pause or resume River queues without stopping workers.")}
             </p>
           </div>
           <div className="max-h-80 divide-y divide-border overflow-y-auto">
@@ -591,12 +592,12 @@ function QueueManager({ queues, onChanged }: { queues: TaskQueueOut[]; onChanged
                         className={`size-2 rounded-full ${queue.paused ? "bg-warning" : "bg-success"}`}
                       />
                       <span className="text-[10px] text-muted">
-                        {queue.paused ? "Paused" : "Active"}
+                        {queue.paused ? t("Paused") : t("Active")}
                       </span>
                     </div>
                     <div className="mt-1 flex gap-3 text-[11px] text-muted">
-                      <span>{queue.available} available</span>
-                      <span>{queue.running} running</span>
+                      <span>{t("{{available}} available", { available: queue.available })}</span>
+                      <span>{t("{{running}} running", { running: queue.running })}</span>
                     </div>
                   </div>
                   <Button
@@ -605,13 +606,13 @@ function QueueManager({ queues, onChanged }: { queues: TaskQueueOut[]; onChanged
                     isPending={pendingQueue === queue.name}
                     onPress={() => toggleQueue(queue)}
                   >
-                    {queue.paused ? "Resume" : "Pause"}
+                    {queue.paused ? t("Resume") : t("Pause")}
                   </Button>
                 </div>
               ))
             ) : (
               <div className="px-4 py-8 text-center text-sm text-muted">
-                No active River queues.
+                {t("No active River queues.")}
               </div>
             )}
           </div>
@@ -626,11 +627,11 @@ function formatDate(value: string) {
 }
 function formatRelativeDate(value: string) {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return t("just now");
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t("{{minutes}}m ago", { minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("{{hours}}h ago", { hours });
   const days = Math.floor(hours / 24);
   return days < 7 ? `${days}d ago` : new Date(value).toLocaleDateString();
 }

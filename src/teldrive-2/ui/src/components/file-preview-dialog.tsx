@@ -10,6 +10,7 @@ import RotateIcon from "~icons/gravity-ui/arrow-rotate-left";
 import ZoomOutIcon from "~icons/gravity-ui/magnifier-minus";
 import ZoomInIcon from "~icons/gravity-ui/magnifier-plus";
 import CloseIcon from "~icons/gravity-ui/xmark";
+import { t } from "@/i18n";
 
 const VideoViewer = lazy(() =>
   import("@/components/viewers/video-viewer").then((module) => ({ default: module.VideoViewer })),
@@ -59,7 +60,7 @@ export function FilePreviewDialog({
         <Modal.Container size="full" scroll="inside" className="h-dvh max-h-dvh p-0">
           <Modal.Dialog className="h-dvh max-h-dvh w-screen max-w-none overflow-hidden rounded-none bg-background p-0 text-foreground">
             <Modal.Heading className="sr-only">{file.name}</Modal.Heading>
-            <Suspense fallback={<ViewerLoading label="Loading PDF engine" />}>
+            <Suspense fallback={<ViewerLoading label={t("Loading PDF engine")} />}>
               <PdfReader
                 key={file.id}
                 file={file}
@@ -85,7 +86,7 @@ export function FilePreviewDialog({
         <Modal.Container size="full" scroll="inside" className="h-dvh max-h-dvh p-0">
           <Modal.Dialog className="h-dvh max-h-dvh w-screen max-w-none overflow-hidden rounded-none bg-background p-0 text-foreground">
             <Modal.Heading className="sr-only">{file.name}</Modal.Heading>
-            <Suspense fallback={<ViewerLoading label="Loading EPUB reader" />}>
+            <Suspense fallback={<ViewerLoading label={t("Loading EPUB reader")} />}>
               <EpubReader
                 key={file.id}
                 file={file}
@@ -121,7 +122,7 @@ export function FilePreviewDialog({
               isIconOnly
               variant="ghost"
               size="sm"
-              aria-label="Close viewer"
+              aria-label={t("Close viewer")}
               onPress={() => changeOpen(false)}
             >
               <CloseIcon className="size-5" />
@@ -140,7 +141,7 @@ export function FilePreviewDialog({
               onPress={() => startFileDownload(file)}
             >
               <DownloadIcon className="size-4" />
-              <span className="hidden sm:inline">Download</span>
+              <span className="hidden sm:inline">{t("Download")}</span>
             </Button>
           </Modal.Header>
           <Modal.Body
@@ -153,7 +154,7 @@ export function FilePreviewDialog({
           >
             {kind === "image" ? <ImageViewer file={file} url={contentUrl} /> : null}
             {kind === "video" ? (
-              <Suspense fallback={<ViewerLoading label="Loading video player" />}>
+              <Suspense fallback={<ViewerLoading label={t("Loading video player")} />}>
                 <VideoViewer file={file} url={contentUrl} />
               </Suspense>
             ) : null}
@@ -183,7 +184,7 @@ function ImageViewer({ file, url }: { file: FileEntry; url: string }) {
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label="Zoom out"
+          aria-label={t("Zoom out")}
           onPress={() => setZoom((value) => Math.max(0.25, value - 0.25))}
         >
           <ZoomOutIcon className="size-4" />
@@ -195,7 +196,7 @@ function ImageViewer({ file, url }: { file: FileEntry; url: string }) {
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label="Zoom in"
+          aria-label={t("Zoom in")}
           onPress={() => setZoom((value) => Math.min(5, value + 0.25))}
         >
           <ZoomInIcon className="size-4" />
@@ -204,7 +205,7 @@ function ImageViewer({ file, url }: { file: FileEntry; url: string }) {
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label="Rotate image"
+          aria-label={t("Rotate image")}
           onPress={() => setRotation((value) => value + 90)}
         >
           <RotateIcon className="size-4" />
@@ -244,7 +245,7 @@ function TextViewer({ url }: { url: string }) {
     return () => controller.abort();
   }, [url]);
   if (error) return <ViewerError message={error} />;
-  if (text === undefined) return <ViewerLoading label="Loading document" />;
+  if (text === undefined) return <ViewerLoading label={t("Loading document")} />;
   return (
     <div className="h-full overflow-auto p-4 sm:p-8">
       <pre className="mx-auto min-h-full max-w-5xl whitespace-pre-wrap rounded-2xl border border-border bg-surface p-5 font-mono text-xs leading-6 shadow-xl sm:p-8">
@@ -267,7 +268,7 @@ function ViewerError({ message }: { message: string }) {
   return (
     <div className="grid h-full place-items-center p-6 text-center">
       <div>
-        <p className="font-semibold">Unable to open this file</p>
+        <p className="font-semibold">{t("Unable to open this file")}</p>
         <p className="mt-2 max-w-lg text-sm text-muted">{message}</p>
       </div>
     </div>

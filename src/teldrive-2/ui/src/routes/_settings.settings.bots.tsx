@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/dialogs/confirm-dialog";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
+import { t } from "@/i18n";
 
 export const Route = createFileRoute("/_settings/settings/bots")({
   component: BotsSettings,
@@ -34,10 +35,10 @@ function BotsSettings() {
     onSuccess: () => {
       setDeleteBot(null);
       void refresh();
-      toast.success("Telegram bot deleted");
+      toast.success(t("Telegram bot deleted"));
     },
     onError: (error) => {
-      toast.error("Telegram bot could not be deleted", { description: userMessage(error) });
+      toast.error(t("Telegram bot could not be deleted"), { description: userMessage(error) });
     },
   });
   const refresh = () =>
@@ -74,7 +75,7 @@ function BotsSettings() {
         );
       }
     } catch (error) {
-      toast.error("Bots could not be queued", { description: userMessage(error) });
+      toast.error(t("Bots could not be queued"), { description: userMessage(error) });
     } finally {
       setIsAddingBots(false);
     }
@@ -83,20 +84,20 @@ function BotsSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Telegram bots"
-        description="Bot accounts used for parallel Telegram API throughput."
+        title={t("Telegram bots")}
+        description={t("Bot accounts used for parallel Telegram API throughput.")}
       />
       <SettingsSection
-        title="Add bots"
-        description="Paste one BotFather token per line. Bots are stored immediately; existing channels are updated in the background."
+        title={t("Add bots")}
+        description={t("Paste one BotFather token per line. Bots are stored immediately; existing channels are updated in the background.")}
       >
         <SettingsRow
-          label="Bot tokens"
-          description="Tokens are sent only to your Teldrive server and are never shown again."
+          label={t("Bot tokens")}
+          description={t("Tokens are sent only to your Teldrive server and are never shown again.")}
         >
           <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
             <TextField className="min-w-0 flex-1">
-              <Label className="sr-only">Bot tokens</Label>
+              <Label className="sr-only">{t("Bot tokens")}</Label>
               <TextArea
                 value={token}
                 onChange={(event) => setToken(event.currentTarget.value)}
@@ -111,14 +112,14 @@ function BotsSettings() {
               isDisabled={!token.trim() || isAddingBots}
               isPending={isAddingBots}
             >
-              Add bots
+              {t("Add bots")}
             </Button>
           </div>
         </SettingsRow>
       </SettingsSection>
       <SettingsSection
-        title="Configured bots"
-        description="Healthy enabled bots are used automatically by the storage runtime."
+        title={t("Configured bots")}
+        description={t("Healthy enabled bots are used automatically by the storage runtime.")}
       >
         {query.data.items.length ? (
           query.data.items.map((bot) => (
@@ -129,7 +130,7 @@ function BotsSettings() {
             >
               <div className="flex items-center justify-end gap-2">
                 <Chip color={bot.enabled ? "success" : "warning"} variant="tertiary">
-                  {bot.enabled ? "Enabled" : "Disabled"}
+                  {bot.enabled ? t("Enabled") : t("Disabled")}
                 </Chip>
                 <Button
                   isIconOnly
@@ -147,7 +148,7 @@ function BotsSettings() {
             </SettingsRow>
           ))
         ) : (
-          <div className="px-5 py-8 text-sm text-muted">No Telegram bots are configured.</div>
+          <div className="px-5 py-8 text-sm text-muted">{t("No Telegram bots are configured.")}</div>
         )}
       </SettingsSection>
       <ConfirmDialog
@@ -155,7 +156,7 @@ function BotsSettings() {
         onOpenChange={(open) => {
           if (!open && !remove.isPending) setDeleteBot(null);
         }}
-        title="Delete Telegram bot?"
+        title={t("Delete Telegram bot?")}
         message={`Uploads using other bots or your user session will continue after “${deleteBot?.name ?? ""}” is removed.`}
         confirmLabel="Delete bot"
         isPending={remove.isPending}

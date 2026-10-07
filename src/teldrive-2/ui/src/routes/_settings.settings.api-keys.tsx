@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/dialogs/confirm-dialog";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
+import { t } from "@/i18n";
 
 export const Route = createFileRoute("/_settings/settings/api-keys")({
   component: ApiKeysSettings,
@@ -40,10 +41,10 @@ function ApiKeysSettings() {
     onSuccess: () => {
       setRevokeKey(null);
       void refresh();
-      toast.success("API key revoked");
+      toast.success(t("API key revoked"));
     },
     onError: (error) => {
-      toast.error("API key could not be revoked", { description: userMessage(error) });
+      toast.error(t("API key could not be revoked"), { description: userMessage(error) });
     },
   });
   const refresh = () =>
@@ -54,24 +55,24 @@ function ApiKeysSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="API keys"
-        description="Credentials for rclone and external API clients. They cannot sign in to this browser UI."
+        title={t("API keys")}
+        description={t("Credentials for rclone and external API clients. They cannot sign in to this browser UI.")}
       />
       <SettingsSection
-        title="Create API key"
-        description="The secret is shown once. Store it in a password manager."
+        title={t("Create API key")}
+        description={t("The secret is shown once. Store it in a password manager.")}
       >
         <SettingsRow
-          label="Key name"
-          description="Use a name that identifies the client or machine."
+          label={t("Key name")}
+          description={t("Use a name that identifies the client or machine.")}
         >
           <div className="flex gap-2">
             <TextField className="min-w-0 flex-1">
-              <Label className="sr-only">Key name</Label>
+              <Label className="sr-only">{t("Key name")}</Label>
               <Input
                 value={name}
                 onChange={(event) => setName(event.currentTarget.value)}
-                placeholder="rclone laptop"
+                placeholder={t("rclone laptop")}
               />
             </TextField>
             <Button
@@ -86,29 +87,29 @@ function ApiKeysSettings() {
                   setName("");
                   await refresh();
                 } catch (error) {
-                  toast.error("API key could not be created", { description: userMessage(error) });
+                  toast.error(t("API key could not be created"), { description: userMessage(error) });
                 }
               }}
               isDisabled={!name.trim() || create.isPending}
             >
-              Create
+              {t("Create")}
             </Button>
           </div>
         </SettingsRow>
         {created ? (
           <SettingsRow
-            label="New API key secret"
-            description="Copy this value now. It cannot be retrieved later."
+            label={t("New API key secret")}
+            description={t("Copy this value now. It cannot be retrieved later.")}
           >
             <div className="flex gap-2">
               <Input readOnly value={created.secret} className="min-w-0 flex-1 font-mono" />
               <Button
                 isIconOnly
                 variant="secondary"
-                aria-label="Copy API key"
+                aria-label={t("Copy API key")}
                 onPress={() => {
                   void navigator.clipboard.writeText(created.secret);
-                  toast.success("API key copied");
+                  toast.success(t("API key copied"));
                 }}
               >
                 <CopyIcon className="size-4" />
@@ -118,8 +119,8 @@ function ApiKeysSettings() {
         ) : null}
       </SettingsSection>
       <SettingsSection
-        title="Existing API keys"
-        description="Revoke credentials that are no longer in use."
+        title={t("Existing API keys")}
+        description={t("Revoke credentials that are no longer in use.")}
       >
         {query.data.items.length ? (
           query.data.items.map((item) => (
@@ -133,7 +134,7 @@ function ApiKeysSettings() {
                   isIconOnly
                   size="sm"
                   variant="ghost"
-                  aria-label={`Revoke ${item.name}`}
+                  aria-label={t("Revoke {{name}}", { name: item.name })}
                   isDisabled={revoke.isPending && revokeKey?.id === item.id}
                   onPress={() => setRevokeKey({ id: item.id, name: item.name })}
                 >
@@ -143,7 +144,7 @@ function ApiKeysSettings() {
             </SettingsRow>
           ))
         ) : (
-          <div className="px-5 py-8 text-sm text-muted">No API keys created.</div>
+          <div className="px-5 py-8 text-sm text-muted">{t("No API keys created.")}</div>
         )}
       </SettingsSection>
       <ConfirmDialog
@@ -151,7 +152,7 @@ function ApiKeysSettings() {
         onOpenChange={(open) => {
           if (!open && !revoke.isPending) setRevokeKey(null);
         }}
-        title="Revoke API key?"
+        title={t("Revoke API key?")}
         message={`Applications using “${revokeKey?.name ?? ""}” will lose access immediately.`}
         confirmLabel="Revoke key"
         isPending={revoke.isPending}

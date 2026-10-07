@@ -7,6 +7,7 @@ import { queryClient } from "@/api/query-client";
 import type { components } from "@/api/schema";
 import { LinkButton } from "@/components/link-button";
 import { Page, PageHeader } from "@/components/page";
+import { t } from "@/i18n";
 
 type StorageActivity = components["schemas"]["StorageActivity"];
 type StorageGrowthPoint = components["schemas"]["StorageGrowthPoint"];
@@ -55,33 +56,33 @@ function StoragePage() {
   return (
     <Page>
       <PageHeader
-        title="Storage"
-        description="Telegram-backed storage usage, growth, distribution, cleanup, and recent activity."
+        title={t("Storage")}
+        description={t("Telegram-backed storage usage, growth, distribution, cleanup, and recent activity.")}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Total stored"
+          label={t("Total stored")}
           value={formatBytes(summary.logicalBytes)}
           detail={`${formatBytes(data.growth.at(-1)?.addedBytes ?? 0)} added today`}
         />
         <StatCard
-          label="Active files"
+          label={t("Active files")}
           value={summary.activeFiles.toLocaleString()}
           detail={`${summary.activeFolders.toLocaleString()} folders`}
         />
         <StatCard
-          label="Trash"
+          label={t("Trash")}
           value={formatBytes(summary.trashBytes)}
           detail={`${summary.trashedFiles.toLocaleString()} files`}
         />
         <StatCard
-          label="Channels"
+          label={t("Channels")}
           value={configuredChannels.toLocaleString()}
           detail={`${selectedChannels.toLocaleString()} selected`}
         />
         <StatCard
-          label="Reclaimable"
+          label={t("Reclaimable")}
           value={formatBytes(data.cleanup.totalReclaimableBytes)}
           detail={`${data.cleanup.staleUploads.toLocaleString()} stale uploads`}
         />
@@ -91,13 +92,13 @@ function StoragePage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <Typography type="h2" className="text-base font-semibold">
-              Storage growth
+              {t("Storage growth")}
             </Typography>
             <Typography.Paragraph className="text-sm text-muted">
-              Logical bytes stored over the last 30 days.
+              {t("Logical bytes stored over the last 30 days.")}
             </Typography.Paragraph>
           </div>
-          <Chip variant="tertiary">30 days</Chip>
+          <Chip variant="tertiary">{t("30 days")}</Chip>
         </div>
         <StorageGrowthChart points={data.growth} />
       </Card>
@@ -106,10 +107,10 @@ function StoragePage() {
         <Card className="gap-5 p-5">
           <div>
             <Typography type="h2" className="text-base font-semibold">
-              Storage composition
+              {t("Storage composition")}
             </Typography>
             <Typography.Paragraph className="text-sm text-muted">
-              Active file bytes grouped by content category.
+              {t("Active file bytes grouped by content category.")}
             </Typography.Paragraph>
           </div>
           <div className="grid gap-4">
@@ -131,7 +132,7 @@ function StoragePage() {
                 </div>
               );
             })}
-            {data.categories.length === 0 && <EmptyCopy>No active files are stored yet.</EmptyCopy>}
+            {data.categories.length === 0 && <EmptyCopy>{t("No active files are stored yet.")}</EmptyCopy>}
           </div>
         </Card>
 
@@ -139,14 +140,14 @@ function StoragePage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <Typography type="h2" className="text-base font-semibold">
-                Telegram channel distribution
+                {t("Telegram channel distribution")}
               </Typography>
               <Typography.Paragraph className="text-sm text-muted">
-                Stored Telegram parts across configured channels.
+                {t("Stored Telegram parts across configured channels.")}
               </Typography.Paragraph>
             </div>
             <LinkButton to="/settings/channels" size="sm" variant="tertiary">
-              Manage channels
+              {t("Manage channels")}
             </LinkButton>
           </div>
           <div className="divide-y divide-border rounded-xl border border-border">
@@ -162,7 +163,7 @@ function StoragePage() {
                         <span className="truncate text-sm font-semibold">{channel.name}</span>
                         {channel.selected && (
                           <Chip size="sm" variant="tertiary">
-                            Selected
+                            {t("Selected")}
                           </Chip>
                         )}
                       </div>
@@ -171,12 +172,12 @@ function StoragePage() {
                       </div>
                     </div>
                   </div>
-                  <ProgressTrack value={percent} label={`${channel.name} storage distribution`} />
+                  <ProgressTrack value={percent} label={t("{{name}} storage distribution", { name: channel.name })} />
                 </div>
               );
             })}
             {data.channels.length === 0 && (
-              <EmptyCopy>No storage channels are configured.</EmptyCopy>
+              <EmptyCopy>{t("No storage channels are configured.")}</EmptyCopy>
             )}
           </div>
         </Card>
@@ -187,33 +188,33 @@ function StoragePage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <Typography type="h2" className="text-base font-semibold">
-                Cleanup opportunities
+                {t("Cleanup opportunities")}
               </Typography>
               <Typography.Paragraph className="text-sm text-muted">
-                Storage that can be reviewed for permanent cleanup.
+                {t("Storage that can be reviewed for permanent cleanup.")}
               </Typography.Paragraph>
             </div>
             <CleanupIcon className="size-5 text-muted" />
           </div>
           <div className="divide-y divide-border rounded-xl border border-border">
-            <MetricRow label="Trash" value={formatBytes(data.cleanup.trashBytes)} />
+            <MetricRow label={t("Trash")} value={formatBytes(data.cleanup.trashBytes)} />
             <MetricRow
-              label="Stale multipart uploads"
+              label={t("Stale multipart uploads")}
               value={formatBytes(data.cleanup.staleUploadBytes)}
               detail={`${data.cleanup.staleUploads.toLocaleString()} sessions`}
             />
             <MetricRow
-              label="Total reclaimable"
+              label={t("Total reclaimable")}
               value={formatBytes(data.cleanup.totalReclaimableBytes)}
               strong
             />
           </div>
           <div className="flex items-center justify-between gap-4">
             <p className="text-xs text-muted">
-              Nothing is deleted automatically from this dashboard.
+              {t("Nothing is deleted automatically from this dashboard.")}
             </p>
             <LinkButton to="/trash" size="sm" variant="primary">
-              Review cleanup
+              {t("Review cleanup")}
             </LinkButton>
           </div>
         </Card>
@@ -221,17 +222,17 @@ function StoragePage() {
         <Card className="gap-5 p-5">
           <div>
             <Typography type="h2" className="text-base font-semibold">
-              Recent storage activity
+              {t("Recent storage activity")}
             </Typography>
             <Typography.Paragraph className="text-sm text-muted">
-              Durable file, upload, share, and channel events.
+              {t("Durable file, upload, share, and channel events.")}
             </Typography.Paragraph>
           </div>
           <div className="divide-y divide-border rounded-xl border border-border">
             {data.activity.map((activity) => (
               <ActivityRow key={activity.id} activity={activity} />
             ))}
-            {data.activity.length === 0 && <EmptyCopy>No recent storage activity.</EmptyCopy>}
+            {data.activity.length === 0 && <EmptyCopy>{t("No recent storage activity.")}</EmptyCopy>}
           </div>
         </Card>
       </div>
@@ -306,7 +307,7 @@ function ActivityRow({ activity }: { activity: StorageActivity }) {
 }
 
 function StorageGrowthChart({ points }: { points: StorageGrowthPoint[] }) {
-  if (points.length === 0) return <EmptyCopy>No storage history is available.</EmptyCopy>;
+  if (points.length === 0) return <EmptyCopy>{t("No storage history is available.")}</EmptyCopy>;
   const width = 960;
   const height = 220;
   const padding = 18;
@@ -329,10 +330,10 @@ function StorageGrowthChart({ points }: { points: StorageGrowthPoint[] }) {
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label="Logical storage growth over 30 days"
+          aria-label={t("Logical storage growth over 30 days")}
           className="h-56 w-full"
         >
-          <title>Logical storage growth over 30 days</title>
+          <title>{t("Logical storage growth over 30 days")}</title>
           {[0.25, 0.5, 0.75].map((ratio) => (
             <line
               key={ratio}
@@ -386,10 +387,10 @@ function formatBytes(bytes: number) {
 function formatRelative(value: string) {
   const delta = Math.max(0, Date.now() - new Date(value).getTime());
   const minutes = Math.floor(delta / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{{minutes}}m ago", { minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("{{hours}}h ago", { hours });
   const days = Math.floor(hours / 24);
   return days < 7 ? `${days}d ago` : new Date(value).toLocaleDateString();
 }

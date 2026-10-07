@@ -5,6 +5,7 @@ import CloseIcon from "~icons/gravity-ui/xmark";
 import type { components } from "@/api/schema";
 import { fetchClient } from "@/api/client";
 import { useAppForm } from "../forms/app-form";
+import { t } from "@/i18n";
 
 type JobCreate = components["schemas"]["JobCreate"];
 type TaskType = "teldrive_upload_cleanup" | "teldrive_pending_file_purge";
@@ -53,7 +54,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
     defaultValues: DEFAULT_VALUES,
     validators: {
       onSubmit: ({ value }) => {
-        if (value.batchSize < 1) return "Batch size must be at least 1";
+        if (value.batchSize < 1) return t("Batch size must be at least 1");
         return undefined;
       },
     },
@@ -68,10 +69,10 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
       };
       const { error } = await fetchClient.POST("/v1/jobs", { body });
       if (error) {
-        toast.error("Failed to queue task");
+        toast.error(t("Failed to queue task"));
         throw new Error("Failed to queue task");
       }
-      toast.success("Task queued");
+      toast.success(t("Task queued"));
       onQueued();
     },
   });
@@ -95,7 +96,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
         <Button
           type="button"
           variant="ghost"
-          aria-label="Close task launcher"
+          aria-label={t("Close task launcher")}
           className="absolute inset-0 h-full w-full rounded-none bg-black/40 backdrop-blur-[1px]"
           onPress={onClose}
         />
@@ -108,14 +109,14 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
         >
           <div className="flex items-start justify-between border-border border-b px-5 py-4 sm:px-6">
             <div>
-              <h2 className="text-lg font-semibold">New task</h2>
-              <p className="mt-0.5 text-xs text-muted">Choose a task and configure its inputs.</p>
+              <h2 className="text-lg font-semibold">{t("New task")}</h2>
+              <p className="mt-0.5 text-xs text-muted">{t("Choose a task and configure its inputs.")}</p>
             </div>
             <Button
               isIconOnly
               size="sm"
               variant="tertiary"
-              aria-label="Close task launcher"
+              aria-label={t("Close task launcher")}
               onPress={onClose}
             >
               <CloseIcon className="size-4" />
@@ -125,11 +126,11 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
           <div className="min-h-0 flex-1 overflow-hidden">
             <div className="border-border border-b p-4 md:hidden">
               <Select
-                aria-label="Task type"
+                aria-label={t("Task type")}
                 selectedKey={values.taskType}
                 onSelectionChange={(key) => chooseTask(String(key) as TaskType)}
               >
-                <Label>Task type</Label>
+                <Label>{t("Task type")}</Label>
                 <Select.Trigger>
                   <Select.Value />
                   <Select.Indicator />
@@ -152,7 +153,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
             <div className="grid h-full min-h-0 md:grid-cols-[12rem_minmax(0,1fr)]">
               <nav
                 className="hidden overflow-y-auto border-border border-r px-3 py-4 md:block"
-                aria-label="Task type"
+                aria-label={t("Task type")}
               >
                 {GROUPS.map((group) => (
                   <div key={group.label} className="mb-5 last:mb-0">
@@ -203,7 +204,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                       maxValue={1000}
                       onChange={(value) => form.setFieldValue("batchSize", value ?? 1)}
                     >
-                      <Label>Batch size</Label>
+                      <Label>{t("Batch size")}</Label>
                       <NumberField.Group>
                         <NumberField.DecrementButton />
                         <NumberField.Input />
@@ -213,8 +214,8 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                     <form.AppField name="queue">
                       {(field) => (
                         <field.TextField
-                          label="Queue"
-                          description="River queue used for this task."
+                          label={t("Queue")}
+                          description={t("River queue used for this task.")}
                         />
                       )}
                     </form.AppField>
@@ -225,7 +226,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                         maxValue={4}
                         onChange={(value) => form.setFieldValue("priority", value ?? 1)}
                       >
-                        <Label>Priority</Label>
+                        <Label>{t("Priority")}</Label>
                         <NumberField.Group>
                           <NumberField.DecrementButton />
                           <NumberField.Input />
@@ -237,7 +238,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
                         minValue={1}
                         onChange={(value) => form.setFieldValue("maxAttempts", value ?? 1)}
                       >
-                        <Label>Max attempts</Label>
+                        <Label>{t("Max attempts")}</Label>
                         <NumberField.Group>
                           <NumberField.DecrementButton />
                           <NumberField.Input />
@@ -253,7 +254,7 @@ export function TaskLauncher({ onQueued, onClose }: { onQueued: () => void; onCl
 
           <div className="flex items-center justify-end gap-2 border-border border-t px-5 py-4 sm:px-6">
             <Button type="button" variant="tertiary" isDisabled={submitting} onPress={onClose}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <form.SubmitButton variant="primary">
               Queue {selected.label.toLowerCase()}

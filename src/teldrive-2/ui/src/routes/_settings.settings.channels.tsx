@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/dialogs/confirm-dialog";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
+import { t } from "@/i18n";
 
 export const Route = createFileRoute("/_settings/settings/channels")({
   component: ChannelsSettings,
@@ -37,10 +38,10 @@ function ChannelsSettings() {
     onSuccess: () => {
       setDeleteChannel(null);
       void refresh();
-      toast.success("Storage channel deleted");
+      toast.success(t("Storage channel deleted"));
     },
     onError: (error) => {
-      toast.error("Storage channel could not be deleted", { description: userMessage(error) });
+      toast.error(t("Storage channel could not be deleted"), { description: userMessage(error) });
     },
   });
   const refresh = () =>
@@ -51,8 +52,8 @@ function ChannelsSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Storage channels"
-        description="Telegram channels used to store encrypted file parts."
+        title={t("Storage channels")}
+        description={t("Telegram channels used to store encrypted file parts.")}
         actions={
           <Button
             variant="secondary"
@@ -62,33 +63,33 @@ function ChannelsSettings() {
                   params: { header: { "Idempotency-Key": newIdempotencyKey() } },
                 });
                 await refresh();
-                toast.success("Channels synchronized");
+                toast.success(t("Channels synchronized"));
               } catch (error) {
-                toast.error("Channel sync failed", { description: userMessage(error) });
+                toast.error(t("Channel sync failed"), { description: userMessage(error) });
               }
             }}
             isDisabled={sync.isPending}
           >
             <RefreshIcon className="size-4" />
-            Discover and sync
+            {t("Discover and sync")}
           </Button>
         }
       />
       <SettingsSection
-        title="Create channel"
-        description="Teldrive will create and configure a Telegram storage channel."
+        title={t("Create channel")}
+        description={t("Teldrive will create and configure a Telegram storage channel.")}
       >
         <SettingsRow
-          label="Channel name"
-          description="Use a recognizable name for this storage target."
+          label={t("Channel name")}
+          description={t("Use a recognizable name for this storage target.")}
         >
           <div className="flex gap-2">
             <TextField className="min-w-0 flex-1">
-              <Label className="sr-only">Channel name</Label>
+              <Label className="sr-only">{t("Channel name")}</Label>
               <Input
                 value={name}
                 onChange={(event) => setName(event.currentTarget.value)}
-                placeholder="Teldrive Storage"
+                placeholder={t("Teldrive Storage")}
               />
             </TextField>
             <Button
@@ -101,34 +102,34 @@ function ChannelsSettings() {
                   });
                   setName("");
                   await refresh();
-                  toast.success("Storage channel created");
+                  toast.success(t("Storage channel created"));
                 } catch (error) {
-                  toast.error("Channel could not be created", { description: userMessage(error) });
+                  toast.error(t("Channel could not be created"), { description: userMessage(error) });
                 }
               }}
               isDisabled={!name.trim() || create.isPending}
             >
-              Create
+              {t("Create")}
             </Button>
           </div>
         </SettingsRow>
       </SettingsSection>
       <SettingsSection
-        title="Configured channels"
-        description="Choose the active channel or remove unused empty channels."
+        title={t("Configured channels")}
+        description={t("Choose the active channel or remove unused empty channels.")}
       >
         {query.data.items.length ? (
           query.data.items.map((channel) => (
             <SettingsRow
               key={channel.id}
               label={channel.name}
-              description={`Channel ${channel.id}`}
+              description={t("Channel {{id}}", { id: channel.id })}
             >
               <div className="flex items-center justify-end gap-2">
                 {channel.selected ? (
                   <Chip color="success" variant="tertiary">
                     <CheckIcon className="size-3" />
-                    Selected
+                    {t("Selected")}
                   </Chip>
                 ) : (
                   <Button
@@ -139,14 +140,14 @@ function ChannelsSettings() {
                       await refresh();
                     }}
                   >
-                    Use channel
+                    {t("Use channel")}
                   </Button>
                 )}
                 <Button
                   isIconOnly
                   size="sm"
                   variant="ghost"
-                  aria-label={`Delete ${channel.name}`}
+                  aria-label={t("Delete {{name}}", { name: channel.name })}
                   isDisabled={remove.isPending && deleteChannel?.id === channel.id}
                   onPress={() => setDeleteChannel({ id: channel.id, name: channel.name })}
                 >
@@ -156,7 +157,7 @@ function ChannelsSettings() {
             </SettingsRow>
           ))
         ) : (
-          <div className="px-5 py-8 text-sm text-muted">No storage channels are configured.</div>
+          <div className="px-5 py-8 text-sm text-muted">{t("No storage channels are configured.")}</div>
         )}
       </SettingsSection>
       <ConfirmDialog
@@ -164,7 +165,7 @@ function ChannelsSettings() {
         onOpenChange={(open) => {
           if (!open && !remove.isPending) setDeleteChannel(null);
         }}
-        title="Delete storage channel?"
+        title={t("Delete storage channel?")}
         message={`“${deleteChannel?.name ?? ""}” can only be deleted when no files reference it.`}
         confirmLabel="Delete channel"
         isPending={remove.isPending}

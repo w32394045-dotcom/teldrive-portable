@@ -25,8 +25,9 @@ node_modules/
 
 # —— 本地工具产物 ——
 /tools/*.png
-/tools/i18n-scan.json
+/tools/i18n-*.json
 /tools/messages-*.json
+/tools/typecheck*.txt
 .bun-cache/
 chrometest/
 

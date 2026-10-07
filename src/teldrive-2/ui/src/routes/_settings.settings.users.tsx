@@ -9,6 +9,7 @@ import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/s
 import { getQueryClient } from "@/lib/queryClient";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import RefreshIcon from "~icons/gravity-ui/arrow-rotate-left";
+import { t } from "@/i18n";
 
 export const Route = createFileRoute("/_settings/settings/users")({
   component: UsersSettings,
@@ -39,37 +40,37 @@ function UsersSettings() {
     try {
       await updateUser.mutateAsync({ params: { path: { userId } }, body });
       await refresh();
-      toast.success("User updated");
+      toast.success(t("User updated"));
     } catch (error) {
-      toast.error("User could not be updated", { description: userMessage(error) });
+      toast.error(t("User could not be updated"), { description: userMessage(error) });
     }
   };
 
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Users & roles"
-        description="Manage who can use this Teldrive instance and which users can administer system-wide features."
+        title={t("Users & roles")}
+        description={t("Manage who can use this Teldrive instance and which users can administer system-wide features.")}
         actions={
           <Button variant="secondary" onPress={() => void refresh()}>
             <RefreshIcon className="size-4" />
-            Refresh
+            {t("Refresh")}
           </Button>
         }
       />
 
       <SettingsSection
-        title="Users"
-        description="The first account is the instance owner and cannot be demoted or disabled."
+        title={t("Users")}
+        description={t("The first account is the instance owner and cannot be demoted or disabled.")}
       >
         <div className="border-b border-border p-4">
           <TextField value={search} onChange={setSearch} className="max-w-md">
-            <Label>Search users</Label>
-            <Input placeholder="Name, username, or Telegram user ID" />
+            <Label>{t("Search users")}</Label>
+            <Input placeholder={t("Name, username, or Telegram user ID")} />
           </TextField>
         </div>
         {query.isPending ? (
-          <div className="flex justify-center p-6" role="status" aria-label="Loading users">
+          <div className="flex justify-center p-6" role="status" aria-label={t("Loading users")}>
             <Spinner />
           </div>
         ) : query.data?.length ? (
@@ -92,7 +93,7 @@ function UsersSettings() {
                   </Chip>
                   {user.disabled ? (
                     <Chip variant="tertiary" color="danger">
-                      Disabled
+                      {t("Disabled")}
                     </Chip>
                   ) : null}
                   {!owner ? (
@@ -104,7 +105,7 @@ function UsersSettings() {
                         void update(user.userId, { role: user.role === "admin" ? "user" : "admin" })
                       }
                     >
-                      {user.role === "admin" ? "Make user" : "Make admin"}
+                      {user.role === "admin" ? t("Make user") : t("Make admin")}
                     </Button>
                   ) : null}
                   {!owner ? (
@@ -114,7 +115,7 @@ function UsersSettings() {
                       isDisabled={updateUser.isPending}
                       onPress={() => void update(user.userId, { disabled: !user.disabled })}
                     >
-                      {user.disabled ? "Enable" : "Disable"}
+                      {user.disabled ? t("Enable") : t("Disable")}
                     </Button>
                   ) : null}
                   {!owner ? (
@@ -127,15 +128,15 @@ function UsersSettings() {
                           await revokeAccess.mutateAsync({
                             params: { path: { userId: user.userId } },
                           });
-                          toast.success("Sessions and API keys revoked");
+                          toast.success(t("Sessions and API keys revoked"));
                         } catch (error) {
-                          toast.error("Access could not be revoked", {
+                          toast.error(t("Access could not be revoked"), {
                             description: userMessage(error),
                           });
                         }
                       }}
                     >
-                      Revoke access
+                      {t("Revoke access")}
                     </Button>
                   ) : null}
                 </div>
@@ -143,7 +144,7 @@ function UsersSettings() {
             );
           })
         ) : (
-          <p className="p-6 text-sm text-muted">No users match this search.</p>
+          <p className="p-6 text-sm text-muted">{t("No users match this search.")}</p>
         )}
       </SettingsSection>
     </div>

@@ -1,5 +1,6 @@
 import { AlertDialog, Button } from "@heroui/react";
 import TrashBinIcon from "~icons/gravity-ui/trash-bin";
+import { t } from "@/i18n";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -36,7 +37,7 @@ export function ConfirmDialog({
           </AlertDialog.Body>
           <AlertDialog.Footer>
             <Button slot="close" variant="tertiary">
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               variant="danger"

@@ -19,6 +19,7 @@ import { AppDialog } from "@/components/dialogs/app-dialog";
 import { copyText } from "@/features/files/download";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
+import { t } from "@/i18n";
 
 type Permission = "read" | "edit";
 type ExpirationMode = "never" | "1h" | "1d" | "7d" | "30d" | "custom";
@@ -116,9 +117,9 @@ export function ShareDialog({
       });
       setPeopleSearch("");
       await refreshGrants();
-      toast.success("Access granted");
+      toast.success(t("Access granted"));
     } catch (error) {
-      toast.error("Access could not be granted", {
+      toast.error(t("Access could not be granted"), {
         description: userMessage(error),
       });
     }
@@ -142,9 +143,9 @@ export function ShareDialog({
       setCreatedUrl(publicUrl);
       await copyText(publicUrl);
       await refreshLinks();
-      toast.success("Public link created and copied");
+      toast.success(t("Public link created and copied"));
     } catch (error) {
-      toast.error("Public link could not be created", {
+      toast.error(t("Public link could not be created"), {
         description: userMessage(error),
       });
     }
@@ -154,36 +155,36 @@ export function ShareDialog({
     <AppDialog
       open={Boolean(file)}
       onOpenChange={onOpenChange}
-      title={file ? `Share ${file.name}` : "Share item"}
-      description="Manage who can access this item and create public links."
+      title={file ? `Share ${file.name}` : t("Share item")}
+      description={t("Manage who can access this item and create public links.")}
       size="lg"
       className="sm:w-[min(92vw,46rem)]"
       bodyClassName="py-4"
       footer={
         <Button variant="secondary" onPress={() => onOpenChange(false)}>
-          Close
+          {t("Close")}
         </Button>
       }
     >
       <div className="grid gap-5">
         <section className="grid gap-4 rounded-2xl border border-border bg-default/10 p-4">
           <div>
-            <h3 className="text-sm font-semibold">People with access</h3>
+            <h3 className="text-sm font-semibold">{t("People with access")}</h3>
             <p className="mt-1 text-xs text-muted">
-              Access applies to this item and its descendants.
+              {t("Access applies to this item and its descendants.")}
             </p>
           </div>
 
           <TextField value={peopleSearch} onChange={setPeopleSearch}>
-            <Label>Add a user</Label>
-            <Input placeholder="Search by name, username, or Telegram ID" />
+            <Label>{t("Add a user")}</Label>
+            <Input placeholder={t("Search by name, username, or Telegram ID")} />
           </TextField>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <ControlField label="Permission">
+            <ControlField label={t("Permission")}>
               <PermissionPicker value={peoplePermission} onChange={setPeoplePermission} />
             </ControlField>
-            <ControlField label="Expiration">
+            <ControlField label={t("Expiration")}>
               <ExpirationPicker
                 mode={peopleExpirationMode}
                 duration={peopleDuration}
@@ -220,7 +221,7 @@ export function ShareDialog({
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-muted">No users found.</p>
+              <p className="text-xs text-muted">{t("No users found.")}</p>
             )
           ) : null}
 
@@ -248,19 +249,19 @@ export function ShareDialog({
                     <p className="mt-0.5 truncate text-xs text-muted">
                       {grant.expiresAt
                         ? `Expires ${new Date(grant.expiresAt).toLocaleString()}`
-                        : "No expiration"}
+                        : t("No expiration")}
                     </p>
                   </div>
                   <Chip variant="tertiary">
-                    {grant.permission === "read" ? "Viewer" : "Editor"}
+                    {grant.permission === "read" ? t("Viewer") : t("Editor")}
                   </Chip>
                   <Dropdown>
-                    <Button isIconOnly size="sm" variant="ghost" aria-label="Grant actions">
+                    <Button isIconOnly size="sm" variant="ghost" aria-label={t("Grant actions")}>
                       <span className="text-lg leading-none">⋯</span>
                     </Button>
                     <Dropdown.Popover className="min-w-48">
                       <Dropdown.Menu
-                        aria-label="Grant actions"
+                        aria-label={t("Grant actions")}
                         onAction={(key) => {
                           if (key === "permission") {
                             void (async () => {
@@ -274,7 +275,7 @@ export function ShareDialog({
                                 });
                                 await refreshGrants();
                               } catch (error) {
-                                toast.error("Permission could not be changed", {
+                                toast.error(t("Permission could not be changed"), {
                                   description: userMessage(error),
                                 });
                               }
@@ -287,9 +288,9 @@ export function ShareDialog({
                                   params: { path: { grantId: grant.id } },
                                 });
                                 await refreshGrants();
-                                toast.success("Access removed");
+                                toast.success(t("Access removed"));
                               } catch (error) {
-                                toast.error("Access could not be removed", {
+                                toast.error(t("Access could not be removed"), {
                                   description: userMessage(error),
                                 });
                               }
@@ -297,11 +298,11 @@ export function ShareDialog({
                           }
                         }}
                       >
-                        <Dropdown.Item id="permission" textValue="Change permission">
+                        <Dropdown.Item id="permission" textValue={t("Change permission")}>
                           <Label>Make {grant.permission === "read" ? "editor" : "viewer"}</Label>
                         </Dropdown.Item>
-                        <Dropdown.Item id="remove" textValue="Remove access">
-                          <Label>Remove access</Label>
+                        <Dropdown.Item id="remove" textValue={t("Remove access")}>
+                          <Label>{t("Remove access")}</Label>
                         </Dropdown.Item>
                       </Dropdown.Menu>
                     </Dropdown.Popover>
@@ -310,7 +311,7 @@ export function ShareDialog({
               ))
             ) : (
               <p className="flex min-h-12 items-center text-xs text-muted">
-                No Teldrive users have access yet.
+                {t("No Teldrive users have access yet.")}
               </p>
             )}
           </div>
@@ -318,17 +319,17 @@ export function ShareDialog({
 
         <section className="grid gap-4 rounded-2xl border border-border bg-default/10 p-4">
           <div>
-            <h3 className="text-sm font-semibold">Public links</h3>
+            <h3 className="text-sm font-semibold">{t("Public links")}</h3>
             <p className="mt-1 text-xs text-muted">
-              Anyone with a link can use the selected permission. Password protection is optional.
+              {t("Anyone with a link can use the selected permission. Password protection is optional.")}
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <ControlField label="Permission">
+            <ControlField label={t("Permission")}>
               <PermissionPicker value={linkPermission} onChange={setLinkPermission} />
             </ControlField>
-            <ControlField label="Expiration">
+            <ControlField label={t("Expiration")}>
               <ExpirationPicker
                 mode={linkExpirationMode}
                 duration={linkDuration}
@@ -339,8 +340,8 @@ export function ShareDialog({
           </div>
 
           <TextField value={linkPassword} onChange={setLinkPassword}>
-            <Label>Password</Label>
-            <Input type="password" placeholder="Optional password" />
+            <Label>{t("Password")}</Label>
+            <Input type="password" placeholder={t("Optional password")} />
           </TextField>
 
           <div>
@@ -349,7 +350,7 @@ export function ShareDialog({
               isDisabled={createLink.isPending}
               onPress={() => void createPublicLink()}
             >
-              Create public link
+              {t("Create public link")}
             </Button>
           </div>
 
@@ -362,15 +363,15 @@ export function ShareDialog({
                 onPress={async () => {
                   try {
                     await copyText(createdUrl);
-                    toast.success("Link copied");
+                    toast.success(t("Link copied"));
                   } catch (error) {
-                    toast.error("Link could not be copied", {
+                    toast.error(t("Link could not be copied"), {
                       description: userMessage(error),
                     });
                   }
                 }}
               >
-                Copy
+                {t("Copy")}
               </Button>
             </div>
           ) : null}
@@ -391,22 +392,22 @@ export function ShareDialog({
                       Public {link.permission === "read" ? "viewer" : "editor"} link
                     </p>
                     <p className="truncate text-xs text-muted">
-                      {link.passwordProtected ? "Password protected · " : ""}
+                      {link.passwordProtected ? t("Password protected · ") : ""}
                       {link.downloadCount} download
                       {link.downloadCount === 1 ? "" : "s"}
                       {link.expiresAt
                         ? ` · Expires ${new Date(link.expiresAt).toLocaleString()}`
-                        : " · No expiration"}
+                        : t(" · No expiration")}
                     </p>
                   </div>
-                  <Chip variant="tertiary">{link.permission === "read" ? "Viewer" : "Editor"}</Chip>
+                  <Chip variant="tertiary">{link.permission === "read" ? t("Viewer") : t("Editor")}</Chip>
                   <Dropdown>
-                    <Button isIconOnly size="sm" variant="ghost" aria-label="Public link actions">
+                    <Button isIconOnly size="sm" variant="ghost" aria-label={t("Public link actions")}>
                       <span className="text-lg leading-none">⋯</span>
                     </Button>
                     <Dropdown.Popover className="min-w-40">
                       <Dropdown.Menu
-                        aria-label="Public link actions"
+                        aria-label={t("Public link actions")}
                         onAction={(key) => {
                           if (key !== "revoke") return;
                           void (async () => {
@@ -415,17 +416,17 @@ export function ShareDialog({
                                 params: { path: { shareId: link.id } },
                               });
                               await refreshLinks();
-                              toast.success("Public link revoked");
+                              toast.success(t("Public link revoked"));
                             } catch (error) {
-                              toast.error("Public link could not be revoked", {
+                              toast.error(t("Public link could not be revoked"), {
                                 description: userMessage(error),
                               });
                             }
                           })();
                         }}
                       >
-                        <Dropdown.Item id="revoke" textValue="Revoke link">
-                          <Label>Revoke link</Label>
+                        <Dropdown.Item id="revoke" textValue={t("Revoke link")}>
+                          <Label>{t("Revoke link")}</Label>
                         </Dropdown.Item>
                       </Dropdown.Menu>
                     </Dropdown.Popover>
@@ -434,7 +435,7 @@ export function ShareDialog({
               ))
             ) : (
               <p className="flex min-h-12 items-center text-xs text-muted">
-                No public links exist for this item.
+                {t("No public links exist for this item.")}
               </p>
             )}
           </div>
@@ -462,22 +463,22 @@ function PermissionPicker({
 }) {
   return (
     <Select
-      aria-label="Share permission"
+      aria-label={t("Share permission")}
       className="w-full"
       selectedKey={value}
       onSelectionChange={(key) => onChange(String(key) as Permission)}
     >
       <Select.Trigger className="h-9 min-h-9 py-1.5">
-        <Select.Value>{value === "read" ? "Viewer" : "Editor"}</Select.Value>
+        <Select.Value>{value === "read" ? t("Viewer") : t("Editor")}</Select.Value>
         <Select.Indicator />
       </Select.Trigger>
       <Select.Popover>
         <ListBox>
-          <ListBox.Item id="read" textValue="Viewer">
-            Viewer
+          <ListBox.Item id="read" textValue={t("Viewer")}>
+            {t("Viewer")}
           </ListBox.Item>
-          <ListBox.Item id="edit" textValue="Editor">
-            Editor
+          <ListBox.Item id="edit" textValue={t("Editor")}>
+            {t("Editor")}
           </ListBox.Item>
         </ListBox>
       </Select.Popover>
@@ -499,7 +500,7 @@ function ExpirationPicker({
   return (
     <div className="grid gap-2">
       <Select
-        aria-label="Expiration"
+        aria-label={t("Expiration")}
         className="w-full"
         selectedKey={mode}
         onSelectionChange={(key) => onModeChange(String(key) as ExpirationMode)}
@@ -510,30 +511,30 @@ function ExpirationPicker({
         </Select.Trigger>
         <Select.Popover>
           <ListBox>
-            <ListBox.Item id="never" textValue="No expiration">
-              No expiration
+            <ListBox.Item id="never" textValue={t("No expiration")}>
+              {t("No expiration")}
             </ListBox.Item>
-            <ListBox.Item id="1h" textValue="1 hour">
-              1 hour
+            <ListBox.Item id="1h" textValue={t("1 hour")}>
+              {t("1 hour")}
             </ListBox.Item>
-            <ListBox.Item id="1d" textValue="1 day">
-              1 day
+            <ListBox.Item id="1d" textValue={t("1 day")}>
+              {t("1 day")}
             </ListBox.Item>
-            <ListBox.Item id="7d" textValue="7 days">
-              7 days
+            <ListBox.Item id="7d" textValue={t("7 days")}>
+              {t("7 days")}
             </ListBox.Item>
-            <ListBox.Item id="30d" textValue="30 days">
-              30 days
+            <ListBox.Item id="30d" textValue={t("30 days")}>
+              {t("30 days")}
             </ListBox.Item>
-            <ListBox.Item id="custom" textValue="Custom">
-              Custom…
+            <ListBox.Item id="custom" textValue={t("Custom")}>
+              {t("Custom…")}
             </ListBox.Item>
           </ListBox>
         </Select.Popover>
       </Select>
       {mode === "custom" ? (
         <TextField value={duration} onChange={onDurationChange}>
-          <Input aria-label="Custom expiration duration" placeholder="1h, 1d12h, 1y" />
+          <Input aria-label={t("Custom expiration duration")} placeholder={t("1h, 1d12h, 1y")} />
         </TextField>
       ) : null}
     </div>
@@ -541,12 +542,12 @@ function ExpirationPicker({
 }
 
 function expirationLabel(mode: ExpirationMode) {
-  if (mode === "never") return "No expiration";
-  if (mode === "1h") return "1 hour";
+  if (mode === "never") return t("No expiration");
+  if (mode === "1h") return t("1 hour");
   if (mode === "1d") return "1 day";
-  if (mode === "7d") return "7 days";
-  if (mode === "30d") return "30 days";
-  return "Custom";
+  if (mode === "7d") return t("7 days");
+  if (mode === "30d") return t("30 days");
+  return t("Custom");
 }
 
 function expirationDate(mode: ExpirationMode, duration: string): string | undefined {

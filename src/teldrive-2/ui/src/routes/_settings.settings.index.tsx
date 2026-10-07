@@ -7,6 +7,7 @@ import { useCurrentUser } from "@/auth/use-current-user";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
 import { getQueryClient } from "@/lib/queryClient";
 import LogoutIcon from "~icons/gravity-ui/arrow-right-from-square";
+import { t } from "@/i18n";
 
 export const Route = createFileRoute("/_settings/settings/")({
   component: AccountSettings,
@@ -41,7 +42,7 @@ function AccountSettings() {
       getQueryClient().clear();
       await navigate({ to: "/login", search: { redirect: "/files" }, replace: true });
     } catch (error) {
-      toast.error("Unable to log out", { description: userMessage(error) });
+      toast.error(t("Unable to log out"), { description: userMessage(error) });
     }
   };
 
@@ -50,18 +51,18 @@ function AccountSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Account"
-        description="Your authenticated Teldrive profile, storage usage, and current session."
+        title={t("Account")}
+        description={t("Your authenticated Teldrive profile, storage usage, and current session.")}
         actions={
           <Button variant="danger" onPress={logOut} isDisabled={logout.isPending}>
             <LogoutIcon className="size-4" />
-            Log out
+            {t("Log out")}
           </Button>
         }
       />
       <SettingsSection
-        title="Profile"
-        description="This identity comes from your authenticated Telegram account."
+        title={t("Profile")}
+        description={t("This identity comes from your authenticated Telegram account.")}
       >
         <SettingsRow
           label={displayName}
@@ -80,13 +81,13 @@ function AccountSettings() {
                     : "default"
               }
             >
-              {user.data.role === "owner" ? "Owner" : user.data.role === "admin" ? "Admin" : "User"}
+              {user.data.role === "owner" ? t("Owner") : user.data.role === "admin" ? "Admin" : "User"}
             </Chip>
           </div>
         </SettingsRow>
         <SettingsRow
-          label="Account created"
-          description="When this Teldrive profile was first created."
+          label={t("Account created")}
+          description={t("When this Teldrive profile was first created.")}
         >
           <p className="text-right text-sm text-muted">
             {new Date(user.data.createdAt).toLocaleString()}
@@ -94,16 +95,16 @@ function AccountSettings() {
         </SettingsRow>
       </SettingsSection>
       <SettingsSection
-        title="Drive statistics"
-        description="Current storage totals for this account."
+        title={t("Drive statistics")}
+        description={t("Current storage totals for this account.")}
       >
-        <SettingsRow label="Files">
+        <SettingsRow label={t("Files")}>
           <p className="text-right font-mono text-sm">{stats.data.totalFiles.toLocaleString()}</p>
         </SettingsRow>
-        <SettingsRow label="Stored data">
+        <SettingsRow label={t("Stored data")}>
           <p className="text-right font-mono text-sm">{formatBytes(stats.data.totalBytes)}</p>
         </SettingsRow>
-        <SettingsRow label="Open uploads">
+        <SettingsRow label={t("Open uploads")}>
           <p className="text-right font-mono text-sm">{stats.data.openUploads.toLocaleString()}</p>
         </SettingsRow>
       </SettingsSection>

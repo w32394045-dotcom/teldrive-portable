@@ -5,6 +5,7 @@ import ChevronIcon from "~icons/gravity-ui/chevron-right";
 import FolderIcon from "~icons/gravity-ui/folder";
 import HomeIcon from "~icons/gravity-ui/house";
 import { useFolderChildren } from "./queries";
+import { t } from "@/i18n";
 
 export function FolderPicker({
   initialPath = "/",
@@ -36,14 +37,14 @@ export function FolderPicker({
   return (
     <div className="grid gap-3">
       <nav
-        aria-label="Destination folder"
+        aria-label={t("Destination folder")}
         className="flex min-w-0 items-center gap-1 overflow-x-auto text-sm"
       >
         <Button
           isIconOnly
           size="sm"
           variant="ghost"
-          aria-label="Drive root"
+          aria-label={t("Drive root")}
           onPress={() => openPath("/")}
         >
           <HomeIcon className="size-4" />
@@ -73,19 +74,19 @@ export function FolderPicker({
           </div>
         ) : folders.isError ? (
           <div className="grid min-h-56 place-items-center gap-3 p-6 text-center">
-            <p className="text-sm text-danger">Folders could not be loaded.</p>
+            <p className="text-sm text-danger">{t("Folders could not be loaded.")}</p>
             <Button size="sm" onPress={() => void folders.refetch()}>
-              Retry
+              {t("Retry")}
             </Button>
           </div>
         ) : (
           <GridList
-            aria-label="Folders"
+            aria-label={t("Folders")}
             items={folders.data?.items ?? []}
             selectionMode="none"
             renderEmptyState={() => (
               <div className="grid min-h-52 place-items-center text-sm text-muted">
-                No folders here.
+                {t("No folders here.")}
               </div>
             )}
             className="outline-none"
