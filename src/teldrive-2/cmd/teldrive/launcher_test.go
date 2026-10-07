@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestWriteLauncherHintExplainsTheBundleAndTheCLI(t *testing.T) {
@@ -58,5 +60,22 @@ func TestRootCommandWithoutSubcommandExplainsTheEntryPoint(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "teldrive run -c config.toml") {
 		t.Fatalf("root output does not document the CLI:\n%s", out.String())
+	}
+}
+
+// Cobra's MousetrapHelpText ships non-empty and makes a binary launched from
+// explorer.exe print a splash and exit before main runs. Double-clicking
+// teldrive.exe is the portable bundle's documented entry point, so the root
+// command has to clear it; this test fails loudly if that assignment is ever
+// dropped, because the breakage only shows up for double-clicks.
+func TestRootCommandDisablesCobraMousetrap(t *testing.T) {
+	original := cobra.MousetrapHelpText
+	t.Cleanup(func() { cobra.MousetrapHelpText = original })
+
+	cobra.MousetrapHelpText = "must be cleared by newRootCommand"
+	_ = newRootCommand()
+
+	if cobra.MousetrapHelpText != "" {
+		t.Fatalf("newRootCommand() left the mousetrap enabled: %q", cobra.MousetrapHelpText)
 	}
 }

@@ -33,6 +33,18 @@ func main() {
 }
 
 func newRootCommand() *cobra.Command {
+	// Cobra's MousetrapHelpText defaults to a non-empty string: any Cobra binary
+	// launched from explorer.exe prints "This is a command line tool. You need to
+	// open cmd.exe and run it from there.", waits five seconds and exits before a
+	// single line of this program runs.
+	//
+	// That is precisely how the portable bundle is meant to be started, so the
+	// splash has to be switched off or double-clicking teldrive.exe -- the one
+	// documented entry point -- dies on the launch screen. Launching from a shell
+	// is unaffected either way, which is why the regression only shows up for the
+	// people the bundle is built for.
+	cobra.MousetrapHelpText = ""
+
 	root := &cobra.Command{
 		Use:           "teldrive",
 		Short:         "Telegram-backed cloud storage server",
