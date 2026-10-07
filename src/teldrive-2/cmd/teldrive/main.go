@@ -38,6 +38,26 @@ func newRootCommand() *cobra.Command {
 		Short:         "Telegram-backed cloud storage server",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// Running the binary with no subcommand is how the portable bundle is
+		// started: double-clicking teldrive.exe brings up the bundled PostgreSQL
+		// and the server, so the released folder needs exactly one entry point.
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			enableUTF8Console()
+			out := cmd.OutOrStdout()
+			err := launchBundled(cmd.Context(), out)
+			switch {
+			case errors.Is(err, errNotBundled):
+				writeLauncherHint(out, buildVersion())
+				pauseWhenDoubleClicked(os.Stdin, out)
+				return nil
+			case err != nil:
+				fmt.Fprintf(cmd.ErrOrStderr(), "\n启动失败：%v\n", err)
+				fmt.Fprintln(out, "详细日志见 data\\initdb.log 与 data\\postgres.log。")
+				pauseWhenDoubleClicked(os.Stdin, out)
+				return err
+			}
+			return nil
+		},
 	}
 	root.AddCommand(newRunCommand(), newCheckCommand(), newVersionCommand())
 	return root

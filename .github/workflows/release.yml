@@ -109,7 +109,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           $tag = $env:GITHUB_REF_NAME
-          $notes = "CI 在 windows-latest 上从源码构建的 Windows 一键运行包。解压后双击 start.bat：首次启动会自动生成随机密钥、初始化内置 PostgreSQL，并在端口就绪后打开浏览器。详见仓库 README。"
+          $notes = "CI 在 windows-latest 上从源码构建的 Windows 一键运行包。解压后双击 teldrive.exe（包里唯一的入口，没有 .bat 脚本）：首次启动会自动生成随机密钥、初始化内置 PostgreSQL，并在端口就绪后打开浏览器；退出时会自己停掉内置数据库。详见仓库 README。"
           Write-Host "publishing $tag (asset $env:ZIP)"
           gh release view $tag --json tagName --jq .tagName 2>&1 | Out-Host
           if ($LASTEXITCODE -ne 0) {

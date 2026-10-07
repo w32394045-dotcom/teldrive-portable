@@ -219,14 +219,27 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		return nil, fmt.Errorf("configure web UI: %w", err)
 	}
 	mux := chi.NewRouter()
-	mux.Use(requestIDMiddleware)
-	mux.Use(httpRequestLogger(dependencies.Logger))
 	requestSecurity, err := newRequestSecurity(cfg.HTTP.TrustedProxies)
 	if err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
+	webDAV, err := newWebDAVHandler(webDAVConfig{
+		catalogService: catalogService,
+		uploadService:  uploadService,
+		pipeline:       uploadPipeline,
+		downloader:     downloader,
+		authService:    authService,
+		httpAddress:    cfg.HTTP.Address,
+		logger:         dependencies.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure webdav: %w", err)
+	}
 	routeApplication(mux, requestSecurity.middleware(browserCSRFMiddleware(sessionRenewalMiddleware(authService, httpServer))), webUI)
-
+	// The DAV surface is dispatched ahead of the mux (chi answers unknown HTTP
+	// methods with 405), and that dispatch carries the request-id and access-log
+	// middleware the mux would otherwise apply.
+	rootHandler := webDAV.wrap(mux, requestSecurity, dependencies.Logger)
 	application := &App{
 		config:            cfg,
 		pool:              pool,
@@ -236,7 +249,7 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		globalCache:       globalCache,
 		http: &http.Server{
 			Addr:              cfg.HTTP.Address,
-			Handler:           mux,
+			Handler:           rootHandler,
 			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 			ReadTimeout:       cfg.HTTP.ReadTimeout,
 			WriteTimeout:      cfg.HTTP.WriteTimeout,

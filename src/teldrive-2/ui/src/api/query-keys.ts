@@ -12,4 +12,5 @@ export const queryKeys = {
   sessions: ["sessions"] as const,
   channels: ["channels"] as const,
   bots: ["bots"] as const,
+  webdavConfig: ["webdav-config"] as const,
 };

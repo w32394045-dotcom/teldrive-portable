@@ -5,6 +5,10 @@ Fails (exit 1) when something is missing or when the archive would leak
 secrets: a published bundle must ship placeholder keys that are generated on
 the user's machine at first run.
 
+Also enforces the single entry point. The release is started by double-clicking
+`teldrive.exe`; shipping .bat launchers alongside it is what used to leave users
+asking which one to run, so any retired script is a hard failure.
+
     python tools/verify_bundle.py dist/teldrive-2-win64.zip
 """
 import sys
@@ -13,15 +17,14 @@ import zipfile
 REQUIRED = [
     "teldrive.exe",
     "config.toml",
-    "start.bat",
-    "stop.bat",
-    "_open-browser.bat",
-    "_init-keys.bat",
     "使用说明.txt",
     "pgsql/bin/postgres.exe",
     "pgsql/bin/initdb.exe",
     "pgsql/bin/pg_ctl.exe",
 ]
+
+# Launcher scripts are gone for good: teldrive.exe does the whole bring-up.
+RETIRED = ["start.bat", "stop.bat", "_open-browser.bat", "_init-keys.bat"]
 
 FORBIDDEN_PARTS = ("/data/", "pgdata", "postgres.log", "initdb.log", "/node_modules/")
 
@@ -42,7 +45,6 @@ def main(path: str) -> int:
         config_bytes = read("config.toml")
         exe_size = len(read("teldrive.exe"))
         pg_size = len(read("pgsql/bin/postgres.exe"))
-        start_bytes = len(read("start.bat"))
 
     problems = []
 
@@ -55,6 +57,13 @@ def main(path: str) -> int:
     for suffix in REQUIRED:
         if f"{root}/{suffix}" not in names:
             problems.append(f"missing required file: {suffix}")
+
+    for retired in RETIRED:
+        if f"{root}/{retired}" in names:
+            problems.append(
+                f"retired launcher script shipped: {retired} "
+                "(the bundle must have exactly one entry point: teldrive.exe)"
+            )
 
     for name in names:
         lowered = name.lower()
@@ -79,13 +88,13 @@ def main(path: str) -> int:
     print(f"top-level      : {root}")
     print(f"teldrive.exe   : {exe_size / 1048576:.1f} MB")
     print(f"postgres.exe   : {pg_size / 1048576:.1f} MB")
-    print(f"start.bat bytes: {start_bytes}")
+    print(f"launcher scripts: none (single entry point: teldrive.exe)")
     if problems:
         print("\nBUNDLE VERIFICATION FAILED:")
         for row in problems:
             print("  -", row)
         return 1
-    print("\nbundle OK: complete, and keys are placeholders (generated on first run)")
+    print("\nbundle OK: complete, no launcher scripts, and keys are placeholders (generated on first run)")
     return 0
 
 

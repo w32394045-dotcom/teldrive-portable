@@ -224,6 +224,11 @@ export default defineConfig(() => {  const backendAddress = process.env.TELDRIVE
         "/api": {
           target: `http://${backendHost}`,
         },
+        // The DAV tree is a protocol endpoint at the server root, so the dev
+        // server has to forward it too. The settings call rides on /api above.
+        "/webdav": {
+          target: `http://${backendHost}`,
+        },
       },
     },
   };

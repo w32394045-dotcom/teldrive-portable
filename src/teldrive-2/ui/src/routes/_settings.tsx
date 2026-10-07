@@ -6,6 +6,7 @@ import KeyIcon from "~icons/gravity-ui/key";
 import MenuIcon from "~icons/gravity-ui/bars";
 import PaletteIcon from "~icons/gravity-ui/palette";
 import PersonIcon from "~icons/gravity-ui/person";
+import PlugIcon from "~icons/gravity-ui/plug-connection";
 import RobotIcon from "~icons/gravity-ui/layers";
 import SessionsIcon from "~icons/gravity-ui/list-ul";
 import StorageIcon from "~icons/gravity-ui/database";
@@ -47,6 +48,14 @@ const SETTINGS_GROUPS = [
     items: [
       { label: "Uploads", path: "/settings/uploads", icon: UploadIcon },
       { label: "Appearance", path: "/settings/appearance", icon: PaletteIcon },
+      // Only owners and administrators may read or change the WebDAV toggle, so
+      // the entry is hidden with the same capability that gates user management.
+      {
+        label: "WebDAV",
+        path: "/settings/webdav",
+        icon: PlugIcon,
+        capability: "system.manageUsers",
+      },
     ],
   },
   {

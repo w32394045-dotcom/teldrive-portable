@@ -92,6 +92,12 @@ const table = {
 const EXPECTATIONS = {
   "zh-CN": [
     {
+      route: "/settings/webdav", name: "webdav settings page",
+      require: ["启用 WebDAV", "连接地址", "客户端设置", "当前支持的功能", "不支持", "rclone"],
+      forbidLines: ["Enable WebDAV", "Connection URL", "Client setup", "What works today"],
+      webdav: true,
+    },
+    {
       route: "/trash", name: "trash kind badges",
       require: ["文件夹", "文件"],
       forbidLines: ["File", "Folder"],
@@ -162,6 +168,26 @@ for (const [locale, specs] of Object.entries(EXPECTATIONS)) {
       if (spec.mockFiles && p === "/v1/files") return json({ items: spec.mockFiles });
       return json(table[p] ?? { items: [] });
     });
+    // The WebDAV toggle is part of the app API, not /api/v1, and needs a session:
+    // mock it here so the settings page renders without a real login.
+    const settingsWrites = [];
+    await page.route("**/api/webdav-config", (route) => {
+      const request = route.request();
+      let enabled = false;
+      if (request.method() === "PUT") {
+        settingsWrites.push(request.postData() || "");
+        try {
+          enabled = JSON.parse(request.postData() || "{}").enabled === true;
+        } catch {
+          enabled = false;
+        }
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ enabled, url: "http://127.0.0.1:8080/webdav" }),
+      });
+    });
     await page.addInitScript((value) => {
       window.localStorage.setItem("teldrive.locale", value);
       window.localStorage.setItem("theme", "dark");
@@ -186,6 +212,22 @@ for (const [locale, specs] of Object.entries(EXPECTATIONS)) {
       check(label, !lines.includes(forbidden), `found exact line`);
     }
     check(`[${locale}] ${spec.name}: no runtime errors`, errors.length === 0, errors.join(" | "));
+
+    // Toggling must reach the settings endpoint with a real body; this is what
+    // "enable it in settings" actually does.
+    if (spec.webdav) {
+      const toggle = page.locator('[role="switch"], input[type="checkbox"]').first();
+      if ((await toggle.count()) === 0) {
+        check(`[${locale}] ${spec.name}: has an enable switch`, false, "no switch element found");
+      } else {
+        await toggle.click({ force: true });
+        await page.waitForTimeout(1200);
+        check(`[${locale}] ${spec.name}: toggle PUTs the setting`, settingsWrites.length > 0,
+          `writes: ${JSON.stringify(settingsWrites)}`);
+        check(`[${locale}] ${spec.name}: toggle sends enabled=true`,
+          settingsWrites.some((body) => body.includes('"enabled":true')), JSON.stringify(settingsWrites));
+      }
+    }
     await page.close();
   }
   await context.close();
