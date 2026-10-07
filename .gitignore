@@ -36,3 +36,4 @@ chrometest/
 Thumbs.db
 .vscode/
 .idea/
+/tools/build*.txt
