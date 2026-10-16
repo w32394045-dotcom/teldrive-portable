@@ -322,6 +322,7 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		backupHandler:  backupHandler,
 		vaultHandler:   vaultHandler,
 		lanHandler:     lanHandler,
+		lan:            lanStore,
 		httpAddress:    cfg.HTTP.Address,
 		logger:         dependencies.Logger,
 	})

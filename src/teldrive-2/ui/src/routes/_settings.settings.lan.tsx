@@ -1,19 +1,20 @@
-import { Button, Chip, Switch, Typography } from "@heroui/react";
+import { Button, Chip, Label, Spinner, Switch, Typography } from "@heroui/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Spinner, Label } from "@heroui/react";
 import { toast } from "sonner";
 import { userMessage } from "@/api/errors";
 import { queryKeys } from "@/api/query-keys";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
+import { copyText } from "@/features/files/download";
 import {
   decideDevice,
   type LanDevice,
   lanQueryOptions,
   setNetworkEnabled,
+  systemStatusQueryOptions,
 } from "@/features/lan/config";
-import { getQueryClient } from "@/lib/queryClient";
 import { t } from "@/i18n";
+import { getQueryClient } from "@/lib/queryClient";
 
 export const Route = createFileRoute("/_settings/settings/lan")({
   component: LanSettings,
@@ -26,6 +27,21 @@ export const Route = createFileRoute("/_settings/settings/lan")({
 
 function LanSettings() {
   const status = useQuery(lanQueryOptions());
+  const where = useQuery(systemStatusQueryOptions());
+
+  const networkUrl = where.data?.networkUrl ?? "";
+  const listening = where.data?.boundToNetwork ?? false;
+
+  const copyAddress = async () => {
+    try {
+      await copyText(networkUrl);
+      toast.success(t("Address copied"));
+    } catch {
+      // An insecure context or a denied permission; the address is still on
+      // screen and can be selected by hand.
+      toast.error(t("The address could not be copied"));
+    }
+  };
 
   const onSaved = (saved: Awaited<ReturnType<typeof decideDevice>>) => {
     getQueryClient().setQueryData(queryKeys.lanAccess, saved);
@@ -122,6 +138,42 @@ function LanSettings() {
             </Typography.Paragraph>
           </SettingsRow>
         ) : null}
+      </SettingsSection>
+
+      <SettingsSection
+        title={t("Where to open it")}
+        description={t(
+          "Type this address on the other device. It works only while this computer is running.",
+        )}
+      >
+        {networkUrl ? (
+          <SettingsRow label={t("Address for other devices")} description={networkUrl}>
+            <div className="flex items-center justify-end gap-3">
+              {listening ? (
+                <Chip color="success" variant="tertiary">
+                  {t("Listening")}
+                </Chip>
+              ) : (
+                <Chip color="warning" variant="tertiary">
+                  {t("Restart needed")}
+                </Chip>
+              )}
+              <Button variant="tertiary" onPress={() => void copyAddress()}>
+                {t("Copy")}
+              </Button>
+            </div>
+          </SettingsRow>
+        ) : (
+          <SettingsRow label={t("No network address found")}>
+            <div className="flex justify-end">
+              <Typography.Paragraph className="max-w-md text-right text-xs text-muted">
+                {t(
+                  "This computer has no address another device could reach. Connect it to a network and reload this page.",
+                )}
+              </Typography.Paragraph>
+            </div>
+          </SettingsRow>
+        )}
       </SettingsSection>
 
       <SettingsSection

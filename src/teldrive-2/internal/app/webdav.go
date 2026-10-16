@@ -10,6 +10,7 @@ import (
 
 	"github.com/tgdrive/teldrive/v2/internal/authn"
 	"github.com/tgdrive/teldrive/v2/internal/catalog"
+	"github.com/tgdrive/teldrive/v2/internal/lanaccess"
 	"github.com/tgdrive/teldrive/v2/internal/transfer"
 	"github.com/tgdrive/teldrive/v2/internal/uploads"
 	"github.com/tgdrive/teldrive/v2/internal/webdav"
@@ -28,6 +29,10 @@ type extraAPIConfig struct {
 	backupHandler  *backupHandler
 	vaultHandler   *vaultHandler
 	lanHandler     *lanHandler
+	// lan is the same registry the handler above uses, read directly by the
+	// status endpoint: "is anybody waiting to be let in" needs the store, not
+	// the page's own view of it.
+	lan            *lanaccess.Store
 	httpAddress    string
 	executablePath string
 	logger         *slog.Logger
@@ -91,6 +96,7 @@ func newExtraAPI(config extraAPIConfig) (*extraAPI, error) {
 		httpAddress: config.httpAddress,
 		executable:  executable,
 		logger:      config.logger,
+		lan:         config.lan,
 	})
 	if err != nil {
 		return nil, err

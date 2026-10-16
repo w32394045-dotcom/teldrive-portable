@@ -7,22 +7,33 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/tgdrive/teldrive/v2/internal/authn"
+	"github.com/tgdrive/teldrive/v2/internal/bundled"
+	"github.com/tgdrive/teldrive/v2/internal/lanaccess"
 	"github.com/tgdrive/teldrive/v2/internal/sysintegration"
 	"github.com/tgdrive/teldrive/v2/internal/webdav"
 )
+
+// defaultListenAddress mirrors the configuration default for the HTTP address.
+// It is derived from the bundled port so the two cannot drift apart.
+var defaultListenAddress = net.JoinHostPort("127.0.0.1", strconv.Itoa(bundled.DefaultPort))
 
 const (
 	// autostartPath and mountPath are the OS integration endpoints.
 	autostartPath = systemPathPrefix + "autostart"
 	mountPath     = systemPathPrefix + "webdav-mount"
+	// statusPath is what the desktop shell and the settings page use to find out
+	// where this drive actually is.
+	statusPath = systemPathPrefix + "status"
 
 	// mountKeyName labels the API key this server generates for the mapping.
 	mountKeyName = "Windows 映射盘（自动创建）"
@@ -42,6 +53,10 @@ type systemConfig struct {
 	httpAddress string
 	executable  string
 	logger      *slog.Logger
+	// lan is only read, and only to answer "what address does another device
+	// use, and is anybody waiting to be let in": the page and the desktop shell
+	// both have to ask somebody.
+	lan *lanaccess.Store
 }
 
 // systemHandler exposes the operating-system integration: start Teldrive at
@@ -52,6 +67,7 @@ type systemHandler struct {
 	store       *webdav.ConfigStore
 	httpAddress string
 	logger      *slog.Logger
+	lan         *lanaccess.Store
 }
 
 func newSystemHandler(config systemConfig) (*systemHandler, error) {
@@ -67,10 +83,19 @@ func newSystemHandler(config systemConfig) (*systemHandler, error) {
 		store:       config.store,
 		httpAddress: config.httpAddress,
 		logger:      config.logger,
+		lan:         config.lan,
 	}, nil
 }
 
 func (h *systemHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Where the drive is is not a secret, and the sign-in page has to be able to
+	// read it before anybody has signed in: a device asking for access shows
+	// this address to the owner. Everything else here changes the machine and
+	// stays behind the manager gate.
+	if r.URL.Path == statusPath {
+		h.serveStatus(w, r)
+		return
+	}
 	userID, ok := h.authorize(w, r)
 	if !ok {
 		return
@@ -83,6 +108,45 @@ func (h *systemHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSONMessage(w, http.StatusNotFound, "not_found", "Unknown system endpoint.")
 	}
+}
+
+// statusResponse is what the settings page and the desktop shell read to find
+// out where the drive is.
+type statusResponse struct {
+	// Address is the configured listen address, verbatim: 0.0.0.0:18787 is the
+	// truth, and hiding it would make a firewall problem impossible to see.
+	Address string `json:"address"`
+	// URL is where this machine opens the drive.
+	URL string `json:"url"`
+	// NetworkURL is where another device on the same network opens it. Empty
+	// when no address on this machine could carry it.
+	NetworkURL string `json:"networkUrl,omitempty"`
+	// NetworkEnabled is the recorded choice, and BoundToNetwork says whether
+	// this process already listens for it: the two differ until a restart.
+	NetworkEnabled bool `json:"networkEnabled"`
+	BoundToNetwork bool `json:"boundToNetwork"`
+	// PendingDevices counts devices waiting to be approved.
+	PendingDevices int `json:"pendingDevices"`
+}
+
+func (h *systemHandler) serveStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		writeJSONMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "Use GET.")
+		return
+	}
+	address := h.bindAddress()
+	response := statusResponse{
+		Address:        address,
+		URL:            siteURL(address),
+		NetworkURL:     networkURLFor(address, interfaceIPv4s()),
+		BoundToNetwork: boundToNetwork(address),
+	}
+	if h.lan != nil {
+		response.NetworkEnabled = h.lan.NetworkEnabled()
+		response.PendingDevices = len(h.lan.Pending())
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 // authorize resolves the browser session and requires an owner or administrator,
@@ -315,21 +379,120 @@ func (h *systemHandler) mountDrive() string {
 	return ""
 }
 
-func (h *systemHandler) mountURL() string {
-	address := strings.TrimSpace(h.httpAddress)
-	if address == "" {
-		// Matches the configuration default, so a mapping made without an
-		// explicit address still points somewhere real.
-		address = "127.0.0.1:18787"
+// bindAddress is the configured listen address, or the configuration default
+// when none was set, so a mapping made without one still points somewhere real.
+func (h *systemHandler) bindAddress() string {
+	if address := strings.TrimSpace(h.httpAddress); address != "" {
+		return address
 	}
-	// A wildcard bind is not something a client can connect to.
-	if parsed, err := url.Parse("//" + address); err == nil {
-		host := parsed.Hostname()
-		if host == "" || host == "0.0.0.0" || host == "::" {
-			address = "127.0.0.1:" + parsed.Port()
+	return defaultListenAddress
+}
+
+func (h *systemHandler) mountURL() string {
+	return siteURL(h.bindAddress()) + "webdav"
+}
+
+// siteURL turns a listen address into something a browser can open. A wildcard
+// bind is not an address anybody can connect to, so it becomes the loopback one.
+func siteURL(address string) string {
+	host, port := splitHTTPAddress(address)
+	if host == "" || isWildcardHost(host) {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/"
+}
+
+// networkURLFor answers "what should another device open". The bind address
+// decides the port and, when it names one real interface, the host as well: a
+// drive bound to a single address is reachable at exactly that address. A
+// loopback or wildcard bind says nothing about the network, so the machine's own
+// addresses are searched instead.
+//
+// It deliberately does not consult the network setting: this is the address that
+// works once the process listens for the network, and boundToNetwork is what
+// says whether it already does.
+func networkURLFor(address string, addrs []net.IP) string {
+	host, port := splitHTTPAddress(address)
+	if host != "" && !isWildcardHost(host) && !isLoopbackHost(host) {
+		return "http://" + net.JoinHostPort(host, port) + "/"
+	}
+	ip := localIPv4(addrs)
+	if ip == "" {
+		return ""
+	}
+	return "http://" + net.JoinHostPort(ip, port) + "/"
+}
+
+// splitHTTPAddress separates host and port. The port falls back to the
+// configured default, so "127.0.0.1" still produces a usable URL.
+func splitHTTPAddress(address string) (host, port string) {
+	port = strconv.Itoa(bundled.DefaultPort)
+	trimmed := strings.TrimSpace(address)
+	if trimmed == "" {
+		return "", port
+	}
+	parsed, err := url.Parse("//" + trimmed)
+	if err != nil {
+		return "", port
+	}
+	if value := parsed.Port(); value != "" {
+		port = value
+	}
+	return parsed.Hostname(), port
+}
+
+func isWildcardHost(host string) bool {
+	switch host {
+	case "", "0.0.0.0", "::", "[::]":
+		return true
+	}
+	return false
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// localIPv4 picks the address another device on the same network can reach.
+// Loopback, link-local and IPv6 addresses are all things a phone cannot use.
+func localIPv4(addrs []net.IP) string {
+	for _, ip := range addrs {
+		if ip == nil || ip.To4() == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			continue
+		}
+		return ip.String()
+	}
+	return ""
+}
+
+// interfaceIPv4s lists the machine's addresses in interface order.
+func interfaceIPv4s() []net.IP {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var addrs []net.IP
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		assigned, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range assigned {
+			if network, ok := addr.(*net.IPNet); ok {
+				addrs = append(addrs, network.IP)
+			}
 		}
 	}
-	return "http://" + address + "/webdav"
+	return addrs
 }
 
 // waitForPrerequisites polls until the redirector settings land, which happens
