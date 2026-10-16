@@ -238,6 +238,27 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		cfg.Encryption.ActiveKeyVersion, eventService,
 	).ConfigureDomains(authService, botService, channelService, fileService, shareService, telegramAccount).
 		ConfigureJobs(jobRuntime)
+	// The local-network registry is loaded before the API is built: an approved
+	// device authenticates through it, so it has to exist before anything can be
+	// asked who a caller is.
+	lanStore := lanaccess.NewStore(lanaccess.DefaultPath(filepath.Dir(backupStore.Path())), dependencies.Logger)
+	if err := lanStore.Load(); err != nil {
+		return nil, err
+	}
+	// Reaching the network is a choice, and it is recorded rather than inferred
+	// from the bind address: a wildcard bind that nobody meant is exactly the
+	// accident this feature exists to prevent.
+	if lanStore.NetworkEnabled() {
+		cfg.HTTP.Address = widenToNetwork(cfg.HTTP.Address)
+		if logger.Enabled(ctx, slog.LevelInfo) {
+			logger.Info("lan.network_enabled", "address", cfg.HTTP.Address)
+		}
+	}
+	// An approved device borrows this machine's session. Wrapping the real
+	// authenticator rather than replacing it keeps the browser session and the
+	// API keys working exactly as before: anything this does not recognise is
+	// passed straight through.
+	authenticator = &deviceAuthenticator{inner: authenticator, devices: lanStore, logger: logger}
 	httpServer, err := api.NewServer(handler, api.NewSecurity(authenticator, eventService))
 	if err != nil {
 		return nil, fmt.Errorf("create generated HTTP server: %w", err)
@@ -280,10 +301,6 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	}
 	// The local-network registry is loaded before the handler is built, because
 	// it is read on every request that arrives from the network.
-	lanStore := lanaccess.NewStore(lanaccess.DefaultPath(filepath.Dir(backupStore.Path())), dependencies.Logger)
-	if err := lanStore.Load(); err != nil {
-		return nil, err
-	}
 	lanHandler, err := newLANHandler(lanConfig{
 		store:       lanStore,
 		authService: authService,
@@ -313,6 +330,9 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	// mux (chi answers unknown HTTP methods with 405), and that dispatch carries
 	// the request-id and access-log middleware the mux would otherwise apply.
 	rootHandler := extras.wrap(mux, requestSecurity, dependencies.Logger)
+	// The guard sits outside everything: it decides whether a request from
+	// another machine may reach the API at all, before any of it runs.
+	rootHandler = &networkGuard{devices: lanStore, next: rootHandler, logger: logger}
 	application := &App{
 		config:            cfg,
 		pool:              pool,
@@ -347,6 +367,24 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	cleanupTelegramDownloads = false
 	cleanupGlobalCache = false
 	return application, nil
+}
+
+// widenToNetwork turns a loopback bind into one the local network can reach.
+//
+// Only a loopback address is widened. An operator who wrote a specific address
+// into the configuration meant it, and quietly overriding that would be a
+// surprise of exactly the kind this feature must not produce.
+func widenToNetwork(address string) string {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return address
+	}
+	switch strings.ToLower(strings.Trim(host, "[]")) {
+	case "127.0.0.1", "localhost", "::1":
+		return net.JoinHostPort("0.0.0.0", port)
+	default:
+		return address
+	}
 }
 
 func expandHomePath(path string) (string, error) {

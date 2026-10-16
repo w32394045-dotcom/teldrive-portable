@@ -107,7 +107,7 @@ func TestLANClaimIsTheOnlyWayToGetACredential(t *testing.T) {
 	}
 
 	// The person approves, and the device collects exactly once.
-	if _, err := handler.store.Approve(request.ID); err != nil {
+	if _, err := handler.store.Approve(request.ID, 42); err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
 	first := callLAN(t, handler, http.MethodGet, pollPath, "", "")

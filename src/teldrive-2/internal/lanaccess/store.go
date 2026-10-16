@@ -127,6 +127,13 @@ func (d Device) public() Public {
 
 type fileFormat struct {
 	Devices []Device `json:"devices"`
+	// OwnerUserID is whose session approved devices borrow. It is recorded when
+	// the first device is approved, from the account doing the approving, rather
+	// than looked up: the person clicking Approve is the owner by definition.
+	OwnerUserID int64 `json:"ownerUserId,omitempty"`
+	// NetworkAllowed records whether the drive is meant to be reachable from the
+	// network at all, so the next start knows what to bind.
+	NetworkAllowed bool `json:"networkAllowed,omitempty"`
 }
 
 // Store owns the registry. It is read on every request that arrives from the
@@ -138,6 +145,11 @@ type Store struct {
 
 	mu      sync.Mutex
 	devices []Device
+	// owner is whose session approved devices borrow, and allowed is whether the
+	// drive is meant to be reachable from the network. Both live in the same
+	// file as the devices so a restart remembers the whole arrangement.
+	owner   int64
+	allowed bool
 }
 
 func NewStore(path string, logger *slog.Logger) *Store {
@@ -171,8 +183,45 @@ func (s *Store) Load() error {
 	}
 	s.mu.Lock()
 	s.devices = parsed.Devices
+	s.owner = parsed.OwnerUserID
+	s.allowed = parsed.NetworkAllowed
 	s.mu.Unlock()
 	return nil
+}
+
+// OwnerUserID is whose session approved devices borrow, or zero when nothing has
+// been approved yet.
+func (s *Store) OwnerUserID() int64 {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.owner
+}
+
+// NetworkEnabled reports whether the drive is meant to be reachable from the
+// network. It is read at startup, because it decides what to bind.
+func (s *Store) NetworkEnabled() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.allowed
+}
+
+// SetNetworkEnabled records the choice. It takes effect at the next start: a
+// listening socket cannot be widened underneath the connections already on it.
+func (s *Store) SetNetworkEnabled(enabled bool) error {
+	if s == nil {
+		return errors.New("lanaccess: store is not configured")
+	}
+	s.mu.Lock()
+	s.allowed = enabled
+	devices := append([]Device(nil), s.devices...)
+	s.mu.Unlock()
+	return s.write(devices)
 }
 
 // Path is the registry file, for diagnostics.
@@ -269,7 +318,10 @@ func (s *Store) Request(name, address string) (Public, error) {
 // asking with the request id it already has -- so the person approving never has
 // to carry a secret across to another machine by hand, which is the step that
 // would make this feature annoying enough not to use.
-func (s *Store) Approve(id string) (Public, error) {
+//
+// ownerUserID is recorded the first time, from the account doing the approving:
+// that account is whose session an approved device will borrow.
+func (s *Store) Approve(id string, ownerUserID int64) (Public, error) {
 	if s == nil {
 		return Public{}, errors.New("lanaccess: store is not configured")
 	}
@@ -289,6 +341,9 @@ func (s *Store) Approve(id string) (Public, error) {
 	// value the device receives has never been on disk.
 	s.devices[index].TokenHash = nil
 	s.devices[index].TokenDelivered = false
+	if ownerUserID > 0 {
+		s.owner = ownerUserID
+	}
 	approved := s.devices[index]
 	devices := append([]Device(nil), s.devices...)
 	s.mu.Unlock()
@@ -495,7 +550,11 @@ func (s *Store) write(devices []Device) error {
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return fmt.Errorf("lanaccess: create data directory: %w", err)
 	}
-	encoded, err := json.MarshalIndent(fileFormat{Devices: devices}, "", " ")
+	encoded, err := json.MarshalIndent(fileFormat{
+		Devices:        devices,
+		OwnerUserID:    s.owner,
+		NetworkAllowed: s.allowed,
+	}, "", " ")
 	if err != nil {
 		return fmt.Errorf("lanaccess: encode registry: %w", err)
 	}

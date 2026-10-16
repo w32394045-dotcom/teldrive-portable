@@ -27,7 +27,7 @@ func testStore(t *testing.T) (*Store, string) {
 // approves, then the device collects its credential.
 func approveAndClaim(t *testing.T, store *Store, id string) string {
 	t.Helper()
-	if _, err := store.Approve(id); err != nil {
+	if _, err := store.Approve(id, 42); err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
 	_, secret, claimed, err := store.Claim(id)
@@ -58,7 +58,7 @@ func TestRequestAndApproveIsTheWholeFlow(t *testing.T) {
 		t.Fatal("something authenticated against an empty registry")
 	}
 
-	approved, err := store.Approve(request.ID)
+	approved, err := store.Approve(request.ID, 42)
 	if err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestDenyAndRevoke(t *testing.T) {
 	store, _ := testStore(t)
 
 	first, _ := store.Request("Tablet", "192.168.1.7")
-	if _, err := store.Approve(first.ID); err != nil {
+	if _, err := store.Approve(first.ID, 42); err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
 
@@ -177,7 +177,7 @@ func TestDenyAndRevoke(t *testing.T) {
 
 	// Approving a decision that was already made is refused rather than
 	// silently re-opening it.
-	if _, err := store.Approve(second.ID); !errors.Is(err, ErrNotPending) {
+	if _, err := store.Approve(second.ID, 42); !errors.Is(err, ErrNotPending) {
 		t.Fatalf("err = %v, want ErrNotPending", err)
 	}
 }
@@ -268,7 +268,7 @@ func TestPendingExpires(t *testing.T) {
 	// An approved device is not expired: it was answered.
 	store.now = func() time.Time { return when }
 	request, _ := store.Request("Approved", "192.168.1.51")
-	if _, err := store.Approve(request.ID); err != nil {
+	if _, err := store.Approve(request.ID, 42); err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
 	store.now = func() time.Time { return when.Add(24 * time.Hour) }
@@ -390,7 +390,7 @@ func TestLoadDegradesOnAnUnreadableFile(t *testing.T) {
 
 func TestUnknownDeviceIDs(t *testing.T) {
 	store, _ := testStore(t)
-	if _, err := store.Approve("nope"); !errors.Is(err, ErrNotFound) {
+	if _, err := store.Approve("nope", 42); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Approve err = %v", err)
 	}
 	if _, err := store.Deny("nope"); !errors.Is(err, ErrNotFound) {

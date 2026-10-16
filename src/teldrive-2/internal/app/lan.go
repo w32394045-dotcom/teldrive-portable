@@ -204,8 +204,9 @@ func (h *lanHandler) devicesResponse() lanDevicesResponse {
 
 // serveDevice approves, refuses or forgets one device.
 func (h *lanHandler) serveDevice(w http.ResponseWriter, r *http.Request) {
-	if _, ok := authorizeManager(w, r, h.auth,
-		"Only an instance owner or administrator can manage local-network access."); !ok {
+	approverID, ok := authorizeManager(w, r, h.auth,
+		"Only an instance owner or administrator can manage local-network access.")
+	if !ok {
 		return
 	}
 	rest := strings.TrimPrefix(r.URL.Path, lanDevicePrefix)
@@ -216,11 +217,13 @@ func (h *lanHandler) serveDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == http.MethodPost && action == "approve":
-		if _, err := h.store.Approve(id); err != nil {
+		// The approving account is whose session the device will borrow, so it
+		// is recorded here rather than looked up later.
+		if _, err := h.store.Approve(id, approverID); err != nil {
 			h.writeDeviceError(w, err)
 			return
 		}
-		h.logger.Info("lan.approved", "device", id)
+		h.logger.Info("lan.approved", "device", id, "owner", approverID)
 	case r.Method == http.MethodPost && action == "deny":
 		if _, err := h.store.Deny(id); err != nil {
 			h.writeDeviceError(w, err)
