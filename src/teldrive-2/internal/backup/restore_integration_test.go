@@ -413,3 +413,70 @@ func TestRestoreRejectsATamperedSnapshot(t *testing.T) {
 		t.Fatal("a rejected restore must not have deleted anything")
 	}
 }
+
+// TestRestoreAddsMissingAccountsWithoutChangingRoles covers rebuilding on a
+// fresh database, where the catalog references accounts that are not there yet.
+//
+// The second half is the safety property: an account that already exists must
+// keep its role. A restore that could re-grant administrator rights would turn
+// "read a chat message" into a privilege escalation.
+func TestRestoreAddsMissingAccountsWithoutChangingRoles(t *testing.T) {
+	restorer, pool := newRestorer(t)
+	ctx := context.Background()
+
+	// The harness seeds the test user with the default role.
+	var roleBefore string
+	if err := pool.QueryRow(ctx, `SELECT role::text FROM teldrive.users WHERE user_id = $1`, testUserID).Scan(&roleBefore); err != nil {
+		t.Fatalf("read seeded role: %v", err)
+	}
+
+	folder := uuid.New()
+	index := &backup.Index{
+		Format:  backup.IndexFormat,
+		Version: backup.IndexVersion,
+		UserID:  testUserID,
+		Content: backup.Content{Users: true, EncryptionKeys: true},
+		Users: []backup.User{
+			// An existing account, claimed to be the owner by the snapshot.
+			{UserID: testUserID, DisplayName: "Renamed By Restore", Username: "restored", Role: "owner"},
+			// An account that is genuinely missing, which the catalog needs.
+			{UserID: testUserID + 1, DisplayName: "Recovered", Username: "recovered", Role: "user"},
+		},
+		Secrets: &backup.Secrets{EncryptionKeys: map[string]string{"1": "key-material"}},
+		Files: []backup.File{
+			{ID: folder.String(), Name: "Docs", Kind: "folder", Status: "active", Generation: 1},
+		},
+	}
+
+	result, err := restorer.Apply(ctx, testUserID, index, backup.RestoreMerge)
+	if err != nil {
+		t.Fatalf("apply merge: %v", err)
+	}
+	if result.Users != 2 {
+		t.Fatalf("users = %d, want 2", result.Users)
+	}
+	if !result.SecretsIncluded {
+		t.Fatal("the result should report that the snapshot carried keys")
+	}
+
+	var restoredName, restoredRole string
+	if err := pool.QueryRow(ctx, `
+SELECT display_name, role::text FROM teldrive.users WHERE user_id = $1`, testUserID+1).Scan(&restoredName, &restoredRole); err != nil {
+		t.Fatalf("the missing account was not created: %v", err)
+	}
+	if restoredName != "Recovered" || restoredRole != "user" {
+		t.Fatalf("restored account = %q/%q", restoredName, restoredRole)
+	}
+
+	var roleAfter, nameAfter string
+	if err := pool.QueryRow(ctx, `
+SELECT role::text, display_name FROM teldrive.users WHERE user_id = $1`, testUserID).Scan(&roleAfter, &nameAfter); err != nil {
+		t.Fatalf("read the existing account: %v", err)
+	}
+	if roleAfter != roleBefore {
+		t.Fatalf("role changed from %q to %q: a restore must not hand out administrator rights", roleBefore, roleAfter)
+	}
+	if nameAfter != "Renamed By Restore" {
+		t.Fatalf("display name = %q, want the cosmetic fields updated", nameAfter)
+	}
+}

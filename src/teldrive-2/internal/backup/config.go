@@ -85,6 +85,11 @@ type configFile struct {
 	// and the signing key; protecting the settings files as a whole is the
 	// vault's job, and a second copy of the same weakness would not solve it.
 	Password string `json:"password,omitempty"`
+	// Content selects the optional sections every snapshot carries. It is stored
+	// rather than chosen per run because a scheduled backup has nobody to ask,
+	// and because "did I include the keys?" is not a question to answer
+	// differently each week.
+	Content Content `json:"content,omitempty"`
 	// LastBackupAt and LastMessageID describe the newest snapshot, for the
 	// settings page and for finding the document after a restart.
 	LastBackupAt  string `json:"lastBackupAt,omitempty"`
@@ -99,6 +104,8 @@ type Settings struct {
 	OwnerUserID int64  `json:"ownerUserId,omitempty"`
 	ChannelID   int64  `json:"channelId"`
 	RestoreMode string `json:"restoreMode"`
+	// Content is what the next snapshot will carry.
+	Content Content `json:"content"`
 	// PasswordSet reports whether snapshots are being sealed. The passphrase
 	// itself is never handed out, not even to an owner: it is not needed to
 	// render the page, and a secret that travels is a secret that leaks.
@@ -176,6 +183,7 @@ func (s *Store) Settings() Settings {
 		OwnerUserID:   s.value.OwnerUserID,
 		ChannelID:     s.value.ChannelID,
 		RestoreMode:   string(mode),
+		Content:       s.value.Content,
 		PasswordSet:   s.value.Password != "",
 		LastBackupAt:  parseTime(s.value.LastBackupAt),
 		LastMessageID: s.value.LastMessageID,
@@ -192,6 +200,24 @@ func (s *Store) Password() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.value.Password
+}
+
+// Content returns the selected optional sections, defaulting to none: a snapshot
+// that is not explicitly told to carry secrets must not carry them.
+func (s *Store) Content() Content {
+	if s == nil {
+		return Content{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.value.Content
+}
+
+// SetContent records which optional sections snapshots should carry.
+func (s *Store) SetContent(content Content) error {
+	return s.update(func(value *configFile) {
+		value.Content = content
+	})
 }
 
 // SetPassword records the sealing passphrase. An empty value turns sealing off,

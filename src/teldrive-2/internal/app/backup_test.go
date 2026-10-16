@@ -463,6 +463,54 @@ func TestInspectNeedsASnapshot(t *testing.T) {
 
 // TestIsBackupPathMatchesExactly keeps a lookalike path from being routed into
 // the backup handler, where the prefix would decide which endpoint runs.
+// TestSettingsContentMergesRatherThanReplaces is the same partial-update rule
+// applied to the content object: a page that only knows about one switch must
+// not clear the other.
+func TestSettingsContentMergesRatherThanReplaces(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, func(store *backup.Store) {
+		if err := store.SetContent(backup.Content{Users: true}); err != nil {
+			t.Fatalf("seed content: %v", err)
+		}
+	})
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath,
+		strings.NewReader(`{"content": {"encryptionKeys": true}}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", recorder.Code, recorder.Body)
+	}
+	content := store.Content()
+	if !content.EncryptionKeys {
+		t.Fatal("the requested section was not enabled")
+	}
+	if !content.Users {
+		t.Fatal("an unrelated section was cleared")
+	}
+}
+
+func TestSettingsReportsWhetherSecretsExist(t *testing.T) {
+	handler, _, _ := newTestBackupHandler(t, nil)
+	request := httptest.NewRequest(http.MethodGet, backupSettingsPath, nil)
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if _, ok := payload["secretsAvailable"]; !ok {
+		t.Fatalf("the page cannot disable a switch that would do nothing: %v", payload)
+	}
+	content, ok := payload["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("content = %#v, want an object", payload["content"])
+	}
+	for _, key := range []string{"encryptionKeys", "users"} {
+		if _, ok := content[key]; !ok {
+			t.Fatalf("content is missing %q: %v", key, content)
+		}
+	}
+}
+
 func TestIsBackupPathMatchesExactly(t *testing.T) {
 	for _, path := range []string{backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath, backupInspectPath} {
 		if !isBackupPath(path) {

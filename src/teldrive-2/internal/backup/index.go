@@ -18,6 +18,9 @@ type Querier interface {
 	ListChannelsForOrphanCleanup(context.Context) ([]*sqlcgen.Channel, error)
 	ListFilesAdvanced(context.Context, sqlcgen.ListFilesAdvancedParams) ([]*sqlcgen.File, error)
 	ListFilePartsByFileIDs(context.Context, []pgtype.UUID) ([]*sqlcgen.FilePart, error)
+	// ListUsers is only consulted when the snapshot is asked to carry the
+	// accounts, so a caller that never selects them still satisfies this.
+	ListUsers(context.Context, sqlcgen.ListUsersParams) ([]*sqlcgen.User, error)
 }
 
 const (
@@ -45,6 +48,15 @@ type Index struct {
 	Channels  []Channel `json:"channels"`
 	Files     []File    `json:"files"`
 	Parts     []Part    `json:"parts"`
+	// Content records which optional sections were selected when this document
+	// was written, so a reader can tell "the keys were not included" apart from
+	// "there were no keys". Without it, a restore could not honestly report
+	// what is missing from the snapshot it just applied.
+	Content Content `json:"content"`
+	// Secrets carries the server-managed keys when Content.EncryptionKeys is set.
+	Secrets *Secrets `json:"secrets,omitempty"`
+	// Users carries the account rows when Content.Users is set.
+	Users []User `json:"users,omitempty"`
 	// Sealed is not part of the document. It records that the bytes on the wire
 	// were encrypted, which the plaintext itself cannot say, so a summary can
 	// report how a snapshot was stored.
@@ -60,6 +72,12 @@ type IndexSummary struct {
 	UserID    int64     `json:"userId"`
 	Counts    Counts    `json:"counts"`
 	Sealed    bool      `json:"sealed"`
+	Content   Content   `json:"content"`
+	// Users and SecretsIncluded say whether the optional sections are present,
+	// without handing over an account list or a key to every reader of a
+	// summary.
+	Users           int  `json:"users"`
+	SecretsIncluded bool `json:"secretsIncluded"`
 }
 
 // Summary describes the index without handing out its contents.
@@ -68,12 +86,15 @@ func (i *Index) Summary() IndexSummary {
 		return IndexSummary{}
 	}
 	return IndexSummary{
-		Format:    i.Format,
-		Version:   i.Version,
-		CreatedAt: i.CreatedAt,
-		UserID:    i.UserID,
-		Counts:    i.Counts,
-		Sealed:    i.Sealed,
+		Format:          i.Format,
+		Version:         i.Version,
+		CreatedAt:       i.CreatedAt,
+		UserID:          i.UserID,
+		Counts:          i.Counts,
+		Sealed:          i.Sealed,
+		Content:         i.Content,
+		Users:           len(i.Users),
+		SecretsIncluded: !i.Secrets.Empty(),
 	}
 }
 
@@ -131,14 +152,27 @@ type Part struct {
 	BlockHashes []byte `json:"blockHashes,omitempty"`
 }
 
-// BuildIndex reads the drive index for one user.
+// BuildIndex reads the drive index for one user, with the core sections only.
+func BuildIndex(ctx context.Context, queries Querier, userID int64, now time.Time) (*Index, error) {
+	return BuildIndexWith(ctx, queries, userID, now, BuildOptions{})
+}
+
+// BuildOptions selects the optional sections and supplies what the database
+// cannot: the server-managed keys live in config.toml, so the caller has to hand
+// them over rather than the builder reading them.
+type BuildOptions struct {
+	Content Content
+	Secrets *Secrets
+}
+
+// BuildIndexWith reads the drive index for one user.
 //
 // Files come from ListFilesAdvanced with scope "drive", which walks the whole
 // tree from the roots in one query rather than one round trip per folder, and
 // pages on the id cursor so a long dump stays consistent while it runs.
 // Trashed files are deliberately excluded: they are already reachable through
 // the trash and would roughly double the document for no restore value.
-func BuildIndex(ctx context.Context, queries Querier, userID int64, now time.Time) (*Index, error) {
+func BuildIndexWith(ctx context.Context, queries Querier, userID int64, now time.Time, options BuildOptions) (*Index, error) {
 	if queries == nil || userID <= 0 {
 		return nil, fmt.Errorf("backup: index needs a query set and a user")
 	}
@@ -164,6 +198,22 @@ func BuildIndex(ctx context.Context, queries Querier, userID int64, now time.Tim
 		Channels:  channels,
 		Files:     files,
 		Parts:     parts,
+		Content:   options.Content,
+	}
+	// The selection is recorded even when a section turns out to be empty, so a
+	// reader can tell "not included" from "nothing to include". The values
+	// themselves are only attached when there is something to attach: an empty
+	// object would claim the keys are in the file.
+	if options.Content.EncryptionKeys && !options.Secrets.Empty() {
+		secrets := *options.Secrets
+		index.Secrets = &secrets
+	}
+	if options.Content.Users {
+		users, err := listUsers(ctx, queries)
+		if err != nil {
+			return nil, err
+		}
+		index.Users = users
 	}
 	index.Counts.Channels = len(channels)
 	index.Counts.Files = len(files)
@@ -174,6 +224,32 @@ func BuildIndex(ctx context.Context, queries Querier, userID int64, now time.Tim
 		}
 	}
 	return index, nil
+}
+
+// listUsersPageSize bounds one ListUsers call. The query is a search with a page
+// size rather than a keyset pager, so the loop stops as soon as a short page
+// comes back.
+const listUsersPageSize int32 = 1000
+
+func listUsers(ctx context.Context, queries Querier) ([]User, error) {
+	rows, err := queries.ListUsers(ctx, sqlcgen.ListUsersParams{
+		PageSize: listUsersPageSize,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("backup: list users: %w", err)
+	}
+	users := make([]User, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, User{
+			UserID:      row.UserID,
+			DisplayName: optText(row.DisplayName),
+			Username:    optText(row.Username),
+			Premium:     row.Premium,
+			Role:        string(row.Role),
+			Disabled:    row.DisabledAt.Valid,
+		})
+	}
+	return users, nil
 }
 
 func listChannels(ctx context.Context, queries Querier, userID int64) ([]Channel, error) {

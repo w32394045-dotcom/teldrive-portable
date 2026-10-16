@@ -85,14 +85,21 @@ const (
 // RestoreResult reports exactly what an apply did. It is returned to the UI so
 // the user can see what changed rather than being told "done".
 type RestoreResult struct {
-	Mode         RestoreMode `json:"mode"`
-	Channels     int         `json:"channels"`
-	Files        int         `json:"files"`
-	Folders      int         `json:"folders"`
-	Parts        int         `json:"parts"`
-	SkippedFiles int         `json:"skippedFiles"`
-	SkippedParts int         `json:"skippedParts"`
-	DeletedFiles int         `json:"deletedFiles,omitempty"`
+	Mode RestoreMode `json:"mode"`
+	// Users is how many accounts the snapshot carried, and SecretsIncluded says
+	// whether it also carried the server-managed keys. The keys are reported
+	// rather than applied: they live in config.toml, not in a table, so putting
+	// them back is a deliberate act by whoever holds the machine, not something
+	// a restore does behind their back.
+	Users           int  `json:"users,omitempty"`
+	SecretsIncluded bool `json:"secretsIncluded,omitempty"`
+	Channels        int  `json:"channels"`
+	Files           int  `json:"files"`
+	Folders         int  `json:"folders"`
+	Parts           int  `json:"parts"`
+	SkippedFiles    int  `json:"skippedFiles"`
+	SkippedParts    int  `json:"skippedParts"`
+	DeletedFiles    int  `json:"deletedFiles,omitempty"`
 	// Orphans are files whose parent exists neither in the catalog nor in the
 	// index, so they could not be attached to anything. They are reported, not
 	// inserted: a file with a dangling parent is invisible either way.
@@ -153,6 +160,7 @@ func (r *Restorer) Apply(ctx context.Context, userID int64, index *Index, mode R
 	partsTable := sqlcgen.QualifiedName("file_parts")
 	channelsTable := sqlcgen.QualifiedName("channels")
 	sessionsTable := sqlcgen.QualifiedName("upload_sessions")
+	usersTable := sqlcgen.QualifiedName("users")
 	kindEnum := sqlcgen.QualifiedName("file_kind")
 	statusEnum := sqlcgen.QualifiedName("file_status")
 	healthEnum := sqlcgen.QualifiedName("channel_health")
@@ -162,6 +170,15 @@ func (r *Restorer) Apply(ctx context.Context, userID int64, index *Index, mode R
 		return RestoreResult{}, fmt.Errorf("backup: begin restore: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+
+	// Accounts come first on purpose: the catalog references them, so on a fresh
+	// database every file insert below would fail without them.
+	users, err := restoreUsers(ctx, tx, usersTable, index.Users)
+	if err != nil {
+		return RestoreResult{}, err
+	}
+	result.Users = users
+	result.SecretsIncluded = !index.Secrets.Empty()
 
 	if err := restoreChannels(ctx, tx, channelsTable, healthEnum, userID, index.Channels); err != nil {
 		return RestoreResult{}, err
@@ -233,6 +250,42 @@ func countFolders(index *Index, present map[string]bool, orphans []string) int {
 		}
 	}
 	return folders
+}
+
+// restoreUsers inserts accounts the catalog needs and returns how many were
+// written.
+//
+// An account that already exists keeps its role and its disabled state. That is
+// deliberate: a restore is a data operation, and one that silently re-granted or
+// revoked administrator rights on a live instance would be a privilege
+// escalation triggered by reading a chat message. The cosmetic fields are
+// updated, because those are what the file list shows.
+func restoreUsers(ctx context.Context, tx pgx.Tx, table string, users []User) (int, error) {
+	if len(users) == 0 {
+		return 0, nil
+	}
+	statement := fmt.Sprintf(`INSERT INTO %s (user_id, display_name, username, premium, created_at, updated_at)
+VALUES ($1, $2, $3, $4, now(), now())
+ON CONFLICT (user_id) DO UPDATE
+SET display_name = EXCLUDED.display_name,
+    username = EXCLUDED.username,
+    premium = EXCLUDED.premium,
+    updated_at = now()`, table)
+
+	rows := make([][]any, 0, len(users))
+	for _, user := range users {
+		rows = append(rows, []any{
+			user.UserID,
+			textValue(user.DisplayName),
+			textValue(user.Username),
+			user.Premium,
+		})
+	}
+	affected, err := execBatches(ctx, tx, statement, rows)
+	if err != nil {
+		return 0, fmt.Errorf("backup: restore accounts: %w", err)
+	}
+	return int(affected), nil
 }
 
 // restoreChannels upserts the channel rows the index refers to. Channels are
@@ -549,6 +602,25 @@ func (i *Index) validate(userID int64) error {
 	}
 	if len(i.Parts) > maxRestoreParts {
 		return fmt.Errorf("the index has %d parts, more than this build restores", len(i.Parts))
+	}
+	// A snapshot states what it carries. A claim without the section is a broken
+	// document rather than an empty one, and applying it would rebuild a drive
+	// with no accounts to own it.
+	if i.Content.Users && i.Users == nil {
+		return errors.New("the index says it carries accounts but has none")
+	}
+	if err := ValidateUsers(i.Users); err != nil {
+		return err
+	}
+	if i.Secrets != nil {
+		if i.Secrets.ActiveKeyVersion != nil && *i.Secrets.ActiveKeyVersion < 0 {
+			return errors.New("the index carries a negative encryption key version")
+		}
+		for version, key := range i.Secrets.EncryptionKeys {
+			if strings.TrimSpace(key) == "" {
+				return fmt.Errorf("the index carries an empty encryption key for version %s", version)
+			}
+		}
 	}
 
 	known := make(map[string]bool, len(i.Files))

@@ -39,6 +39,10 @@ type Service struct {
 	store   *Store
 	logger  *slog.Logger
 	now     func() time.Time
+	// secrets are the server-managed keys, handed over by the composition root
+	// because they live in the configuration rather than in the database. They
+	// are only written when the settings ask for them.
+	secrets *Secrets
 }
 
 func NewService(queries Querier, storage telegramstore.Storage, store *Store, logger *slog.Logger) *Service {
@@ -46,6 +50,20 @@ func NewService(queries Querier, storage telegramstore.Storage, store *Store, lo
 		logger = slog.Default()
 	}
 	return &Service{queries: queries, storage: storage, store: store, logger: logger, now: time.Now}
+}
+
+// SetSecrets supplies the server-managed keys a snapshot may carry.
+//
+// It is a setter rather than a constructor argument because the keys come from
+// the configuration, which the composition root reads after the storage and
+// query set already exist; the same shape the upload service uses for its cache
+// invalidator. Calling it is optional: without it, selecting the encryption keys
+// simply records that there were none to write.
+func (s *Service) SetSecrets(secrets *Secrets) {
+	if s == nil {
+		return
+	}
+	s.secrets = secrets
 }
 
 // Entry describes one snapshot stored in Telegram.
@@ -77,7 +95,19 @@ func (s *Service) Create(ctx context.Context, userID int64) (Result, error) {
 	}
 
 	started := s.now().UTC()
-	index, err := BuildIndex(ctx, s.queries, userID, started)
+	// The selection is read here rather than passed in, because the scheduled
+	// path has no caller to ask: a periodic run has to use whatever the settings
+	// already say.
+	content := s.store.Content()
+	if content.EncryptionKeys {
+		s.logger.Warn("backup.creating_with_secrets",
+			"sealed", s.store.Password() != "",
+			"detail", "this snapshot will contain the keys that decrypt the stored parts")
+	}
+	index, err := BuildIndexWith(ctx, s.queries, userID, started, BuildOptions{
+		Content: content,
+		Secrets: s.secrets,
+	})
 	if err != nil {
 		return Result{}, err
 	}

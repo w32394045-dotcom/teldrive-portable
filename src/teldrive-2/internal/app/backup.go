@@ -14,6 +14,7 @@ import (
 
 	"github.com/tgdrive/teldrive/v2/internal/authn"
 	"github.com/tgdrive/teldrive/v2/internal/backup"
+	"github.com/tgdrive/teldrive/v2/internal/config"
 	"github.com/tgdrive/teldrive/v2/internal/jobs"
 )
 
@@ -58,6 +59,9 @@ type backupConfig struct {
 	scheduler   backupScheduler
 	authService *authn.Service
 	logger      *slog.Logger
+	// secretsAvailable reports whether this instance has server-managed keys at
+	// all, so the page can disable a switch that would do nothing.
+	secretsAvailable bool
 }
 
 // backupHandler serves the drive-index snapshot settings. Like the WebDAV toggle
@@ -75,6 +79,9 @@ type backupHandler struct {
 	scheduler backupScheduler
 	auth      *authn.Service
 	logger    *slog.Logger
+	// secretsAvailable mirrors the configuration: it never carries a key, only
+	// the fact that one exists.
+	secretsAvailable bool
 }
 
 func newBackupHandler(config backupConfig) (*backupHandler, error) {
@@ -85,12 +92,13 @@ func newBackupHandler(config backupConfig) (*backupHandler, error) {
 		config.logger = slog.Default()
 	}
 	return &backupHandler{
-		service:   config.service,
-		restorer:  config.restorer,
-		store:     config.store,
-		scheduler: config.scheduler,
-		auth:      config.authService,
-		logger:    config.logger,
+		service:          config.service,
+		restorer:         config.restorer,
+		store:            config.store,
+		scheduler:        config.scheduler,
+		auth:             config.authService,
+		logger:           config.logger,
+		secretsAvailable: config.secretsAvailable,
 	}, nil
 }
 
@@ -137,6 +145,13 @@ type settingsResponse struct {
 	// deliberately absent: the page only needs to know whether one is set, and a
 	// secret that travels is a secret that leaks.
 	PasswordSet bool `json:"passwordSet"`
+	// Content is what the next snapshot will carry. It travels as an object so
+	// adding a section later cannot be mistaken for a field the page forgot to
+	// send.
+	Content backup.Content `json:"content"`
+	// SecretsAvailable says whether this instance has server-managed keys to
+	// include at all, so the page can disable a switch that would do nothing.
+	SecretsAvailable bool `json:"secretsAvailable"`
 	// The bounds travel with the payload rather than being reimplemented in the
 	// UI, so the two can never drift apart.
 	DefaultInterval string `json:"defaultInterval"`
@@ -145,6 +160,25 @@ type settingsResponse struct {
 	// typed passphrase before sending it, and hard-coding the rule there would
 	// let the two drift.
 	MinimumPasswordLength int `json:"minimumPasswordLength"`
+}
+
+// contentBody is the wire form of the content selection. It exists so a partial
+// object cannot be mistaken for a full one: a pointer per field keeps "absent"
+// and "false" distinguishable, so a page that only knows about one switch cannot
+// silently clear the other.
+type contentBody struct {
+	EncryptionKeys *bool `json:"encryptionKeys"`
+	Users          *bool `json:"users"`
+}
+
+func (c contentBody) applyTo(current backup.Content) backup.Content {
+	if c.EncryptionKeys != nil {
+		current.EncryptionKeys = *c.EncryptionKeys
+	}
+	if c.Users != nil {
+		current.Users = *c.Users
+	}
+	return current
 }
 
 func (h *backupHandler) serveSettings(w http.ResponseWriter, r *http.Request, userID int64) {
@@ -160,15 +194,18 @@ func (h *backupHandler) serveSettings(w http.ResponseWriter, r *http.Request, us
 			// stores snapshots as plain JSON, which is a legitimate choice for an
 			// unattended schedule rather than a mistake to be rejected.
 			Password *string `json:"password"`
+			// Content selects the optional sections. Omitted keeps the current
+			// selection, so saving a switch cannot silently drop the keys.
+			Content *contentBody `json:"content"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, configBodyLimit)).Decode(&body); err != nil {
 			writeJSONMessage(w, http.StatusBadRequest, "invalid_request",
-				`Expected a JSON body of the form {"enabled": true|false, "interval": "168h", "restoreMode": "overwrite", "password": "..."}.`)
+				`Expected a JSON body of the form {"enabled": true|false, "interval": "168h", "restoreMode": "overwrite", "password": "...", "content": {"encryptionKeys": true}}.`)
 			return
 		}
-		if body.Enabled == nil && body.Interval == nil && body.RestoreMode == nil && body.Password == nil {
+		if body.Enabled == nil && body.Interval == nil && body.RestoreMode == nil && body.Password == nil && body.Content == nil {
 			writeJSONMessage(w, http.StatusBadRequest, "invalid_request",
-				`Expected at least one of "enabled", "interval", "restoreMode" or "password".`)
+				`Expected at least one of "enabled", "interval", "restoreMode", "password" or "content".`)
 			return
 		}
 		// Omitted fields keep their current value, so saving one switch cannot
@@ -198,6 +235,14 @@ func (h *backupHandler) serveSettings(w http.ResponseWriter, r *http.Request, us
 		if body.Password != nil {
 			if err := h.store.SetPassword(*body.Password); err != nil {
 				writeJSONMessage(w, http.StatusBadRequest, "invalid_password", err.Error())
+				return
+			}
+		}
+		if body.Content != nil {
+			if err := h.store.SetContent(body.Content.applyTo(h.store.Content())); err != nil {
+				h.logger.Error("backup.settings.content_failed", "error", err)
+				writeJSONMessage(w, http.StatusInternalServerError, "write_failed",
+					"The backup contents could not be saved: "+err.Error())
 				return
 			}
 		}
@@ -493,16 +538,18 @@ func (h *backupHandler) serveRestore(w http.ResponseWriter, r *http.Request, use
 func (h *backupHandler) snapshot() settingsResponse {
 	settings := h.store.Settings()
 	response := settingsResponse{
-		Enabled:         settings.Enabled,
-		Interval:        settings.Interval,
-		ChannelID:       settings.ChannelID,
-		LastMessageID:   settings.LastMessageID,
-		LastSize:        settings.LastSize,
-		RestoreMode:     settings.RestoreMode,
-		RestoreModes:    restoreModeNames(),
-		PasswordSet:     settings.PasswordSet,
-		DefaultInterval: backup.DefaultInterval.String(),
-		MinimumInterval: backup.MinInterval.String(),
+		Enabled:          settings.Enabled,
+		Interval:         settings.Interval,
+		ChannelID:        settings.ChannelID,
+		LastMessageID:    settings.LastMessageID,
+		LastSize:         settings.LastSize,
+		RestoreMode:      settings.RestoreMode,
+		RestoreModes:     restoreModeNames(),
+		PasswordSet:      settings.PasswordSet,
+		Content:          settings.Content,
+		SecretsAvailable: h.secretsAvailable,
+		DefaultInterval:  backup.DefaultInterval.String(),
+		MinimumInterval:  backup.MinInterval.String(),
 
 		MinimumPasswordLength: backup.MinimumPasswordLength,
 	}
@@ -519,6 +566,28 @@ func restoreModeNames() []string {
 		names = append(names, string(mode))
 	}
 	return names
+}
+
+// backupSecrets converts the configured server-managed keys into the form a
+// snapshot carries. The keys live in config.toml rather than in a table, which
+// is exactly why losing the machine loses them, and why a backup that includes
+// them is the only way an encrypted drive survives that loss.
+func backupSecrets(cfg config.Config) *backup.Secrets {
+	if len(cfg.Encryption.Keys) == 0 && cfg.Encryption.ActiveKeyVersion == 0 {
+		return nil
+	}
+	// Copied rather than referenced: the map belongs to the application config,
+	// and a snapshot must not be able to mutate it.
+	keys := make(map[string]string, len(cfg.Encryption.Keys))
+	for version, key := range cfg.Encryption.Keys {
+		keys[strconv.Itoa(int(version))] = key
+	}
+	secrets := &backup.Secrets{EncryptionKeys: keys}
+	if cfg.Encryption.ActiveKeyVersion > 0 {
+		active := cfg.Encryption.ActiveKeyVersion
+		secrets.ActiveKeyVersion = &active
+	}
+	return secrets
 }
 
 // newBackupStore loads the snapshot settings file. A missing file is the

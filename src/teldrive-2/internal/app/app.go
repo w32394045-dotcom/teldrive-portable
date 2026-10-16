@@ -212,6 +212,9 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		return nil, err
 	}
 	backupService := backup.NewService(sqlcgen.New(pool), storage, backupStore, dependencies.Logger)
+	// The server-managed keys live in the configuration rather than the database,
+	// so the composition root is the only place that can hand them over.
+	backupService.SetSecrets(backupSecrets(cfg))
 	jobRuntime, err := jobs.NewRuntimeWithBackup(
 		pool, storage, cfg.Database.Schema, botService, secureCipher, cfg.Uploads.SessionTTL,
 		jobs.UploaderServices{Catalog: catalogService, Uploads: uploadService, Pipeline: uploadPipeline, ActiveKeyVersion: cfg.Encryption.ActiveKeyVersion, LocalImportRoots: cfg.Uploads.LocalImportRoots},
@@ -250,6 +253,9 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		scheduler:   jobRuntime,
 		authService: authService,
 		logger:      dependencies.Logger,
+		// The page needs to know whether there is anything to include before it
+		// offers a switch that would otherwise do nothing.
+		secretsAvailable: backupSecrets(cfg) != nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure backups: %w", err)

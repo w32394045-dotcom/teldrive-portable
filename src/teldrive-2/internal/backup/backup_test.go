@@ -26,8 +26,18 @@ type fakeQuerier struct {
 	channels  []*sqlcgen.Channel
 	files     []*sqlcgen.File
 	parts     []*sqlcgen.FilePart
+	users     []*sqlcgen.User
 	fileCalls int
 	partCalls int
+	userCalls int
+}
+
+func (f *fakeQuerier) ListUsers(_ context.Context, arg sqlcgen.ListUsersParams) ([]*sqlcgen.User, error) {
+	f.userCalls++
+	if int(arg.PageSize) >= len(f.users) {
+		return f.users, nil
+	}
+	return f.users[:arg.PageSize], nil
 }
 
 func (f *fakeQuerier) ListChannelsForOrphanCleanup(context.Context) ([]*sqlcgen.Channel, error) {
