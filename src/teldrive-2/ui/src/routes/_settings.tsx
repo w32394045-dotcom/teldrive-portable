@@ -9,6 +9,7 @@ import PersonIcon from "~icons/gravity-ui/person";
 import PlugIcon from "~icons/gravity-ui/plug-connection";
 import RobotIcon from "~icons/gravity-ui/layers";
 import SessionsIcon from "~icons/gravity-ui/list-ul";
+import ShieldIcon from "~icons/gravity-ui/shield-check";
 import StorageIcon from "~icons/gravity-ui/database";
 import UploadIcon from "~icons/gravity-ui/arrow-up-from-line";
 import CloseIcon from "~icons/gravity-ui/xmark";
@@ -34,6 +35,15 @@ const SETTINGS_GROUPS = [
     items: [
       { label: "Channels", path: "/settings/channels", icon: StorageIcon },
       { label: "Bots", path: "/settings/bots", icon: RobotIcon },
+      // Snapshots live in a Telegram channel of their own, and only owners and
+      // administrators may touch the schedule or apply one, so the entry carries
+      // the same capability as the settings endpoint that serves it.
+      {
+        label: "Backup",
+        path: "/settings/backup",
+        icon: ShieldIcon,
+        capability: "system.manageUsers",
+      },
     ],
   },
   {
