@@ -33,6 +33,7 @@ import (
 	"github.com/tgdrive/teldrive/v2/internal/fileops"
 	"github.com/tgdrive/teldrive/v2/internal/health"
 	"github.com/tgdrive/teldrive/v2/internal/jobs"
+	"github.com/tgdrive/teldrive/v2/internal/lanaccess"
 	"github.com/tgdrive/teldrive/v2/internal/legacymigrate"
 	"github.com/tgdrive/teldrive/v2/internal/secureblob"
 	"github.com/tgdrive/teldrive/v2/internal/shares"
@@ -277,6 +278,20 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	if err != nil {
 		return nil, fmt.Errorf("configure settings vault: %w", err)
 	}
+	// The local-network registry is loaded before the handler is built, because
+	// it is read on every request that arrives from the network.
+	lanStore := lanaccess.NewStore(lanaccess.DefaultPath(filepath.Dir(backupStore.Path())), dependencies.Logger)
+	if err := lanStore.Load(); err != nil {
+		return nil, err
+	}
+	lanHandler, err := newLANHandler(lanConfig{
+		store:       lanStore,
+		authService: authService,
+		logger:      dependencies.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure local-network access: %w", err)
+	}
 	extras, err := newExtraAPI(extraAPIConfig{
 		catalogService: catalogService,
 		uploadService:  uploadService,
@@ -286,6 +301,7 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		configStore:    configStore,
 		backupHandler:  backupHandler,
 		vaultHandler:   vaultHandler,
+		lanHandler:     lanHandler,
 		httpAddress:    cfg.HTTP.Address,
 		logger:         dependencies.Logger,
 	})

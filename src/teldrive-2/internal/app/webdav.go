@@ -27,6 +27,7 @@ type extraAPIConfig struct {
 	configStore    *webdav.ConfigStore
 	backupHandler  *backupHandler
 	vaultHandler   *vaultHandler
+	lanHandler     *lanHandler
 	httpAddress    string
 	executablePath string
 	logger         *slog.Logger
@@ -46,6 +47,7 @@ type extraAPI struct {
 	system   http.Handler
 	backup   http.Handler
 	vault    http.Handler
+	lan      http.Handler
 }
 
 const (
@@ -100,6 +102,7 @@ func newExtraAPI(config extraAPIConfig) (*extraAPI, error) {
 		system:   system,
 		backup:   config.backupHandler,
 		vault:    config.vaultHandler,
+		lan:      config.lanHandler,
 	}, nil
 }
 
@@ -118,6 +121,14 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 	if h.vault != nil {
 		vaultHandler = security.middleware(browserCSRFMiddleware(h.vault))
 	}
+	// The local-network surface is the one place a request may arrive with no
+	// session at all -- a device asking for access has none yet -- so it is
+	// dispatched without the browser-session treatment and decides for itself
+	// which of its routes need an owner.
+	var lan http.Handler
+	if h.lan != nil {
+		lan = security.middleware(h.lan)
+	}
 
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -129,6 +140,8 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 			backup.ServeHTTP(w, r)
 		case vaultHandler != nil && isVaultPath(r.URL.Path):
 			vaultHandler.ServeHTTP(w, r)
+		case lan != nil && strings.HasPrefix(r.URL.Path, lanPathPrefix):
+			lan.ServeHTTP(w, r)
 		case isDAVPath(r.URL.Path):
 			dav.ServeHTTP(w, r)
 		default:
