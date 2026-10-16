@@ -26,6 +26,10 @@ const (
 	lanDevicesPath = "/api/lan/devices"
 	// lanDevicePrefix is approval, refusal and forgetting, keyed by device id.
 	lanDevicePrefix = "/api/lan/devices/"
+	// lanNetworkPath is the exposure switch. It is separate from the device
+	// registry because it is a different decision: who may reach the port, and
+	// whether the port is reachable at all.
+	lanNetworkPath = "/api/lan/network"
 	// lanPathPrefix is what the dispatcher matches; the handler then routes
 	// internally, because these paths carry an id and cannot be exact literals.
 	lanPathPrefix = "/api/lan/"
@@ -35,6 +39,9 @@ type lanConfig struct {
 	store       *lanaccess.Store
 	authService *authn.Service
 	logger      *slog.Logger
+	// boundToNetwork is whether this process is listening for the network, so
+	// the page can say whether a change needs a restart.
+	boundToNetwork bool
 }
 
 // lanHandler serves the local-network access requests.
@@ -46,6 +53,10 @@ type lanHandler struct {
 	store  *lanaccess.Store
 	auth   *authn.Service
 	logger *slog.Logger
+	// boundToNetwork is whether the running server is actually listening for the
+	// network, which is what makes "restart required" an honest statement rather
+	// than a guess.
+	boundToNetwork bool
 }
 
 func newLANHandler(cfg lanConfig) (*lanHandler, error) {
@@ -55,7 +66,12 @@ func newLANHandler(cfg lanConfig) (*lanHandler, error) {
 	if cfg.logger == nil {
 		cfg.logger = slog.Default()
 	}
-	return &lanHandler{store: cfg.store, auth: cfg.authService, logger: cfg.logger}, nil
+	return &lanHandler{
+		store:          cfg.store,
+		auth:           cfg.authService,
+		logger:         cfg.logger,
+		boundToNetwork: cfg.boundToNetwork,
+	}, nil
 }
 
 func (h *lanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +80,8 @@ func (h *lanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveRequest(w, r)
 	case strings.HasPrefix(r.URL.Path, lanRequestPrefix):
 		h.serveClaim(w, r)
+	case r.URL.Path == lanNetworkPath:
+		h.serveNetwork(w, r)
 	case r.URL.Path == lanDevicesPath:
 		h.serveDevices(w, r)
 	case strings.HasPrefix(r.URL.Path, lanDevicePrefix):
@@ -170,11 +188,51 @@ func (h *lanHandler) serveClaim(w http.ResponseWriter, r *http.Request) {
 type lanDevicesResponse struct {
 	Devices []lanaccess.Public `json:"devices"`
 	Pending []lanaccess.Public `json:"pending"`
+	// NetworkEnabled is whether the drive is meant to be reachable from the
+	// local network. It is read at startup, so a change takes effect when the
+	// service is restarted, and RestartRequired says so plainly rather than
+	// leaving the page to imply an immediacy it does not have.
+	NetworkEnabled  bool `json:"networkEnabled"`
+	RestartRequired bool `json:"restartRequired"`
 	// RequestPath and PollPath are what a device needs to ask and to collect its
 	// answer, so the page that explains the flow cannot disagree with the server
 	// about where they are.
 	RequestPath string `json:"requestPath"`
 	PollPath    string `json:"pollPath"`
+}
+
+// serveNetwork reads and changes whether the drive is reachable from the network.
+func (h *lanHandler) serveNetwork(w http.ResponseWriter, r *http.Request) {
+	if _, ok := authorizeManager(w, r, h.auth,
+		"Only an instance owner or administrator can change network access."); !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, h.devicesResponse())
+	case http.MethodPost:
+		var body struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, configBodyLimit)).Decode(&body); err != nil || body.Enabled == nil {
+			writeJSONMessage(w, http.StatusBadRequest, "invalid_request",
+				`Expected a JSON body of the form {"enabled": true|false}.`)
+			return
+		}
+		if err := h.store.SetNetworkEnabled(*body.Enabled); err != nil {
+			h.logger.Error("lan.network_write_failed", "error", err)
+			writeJSONMessage(w, http.StatusInternalServerError, "write_failed", err.Error())
+			return
+		}
+		// Turning this on is the moment the drive stops being local-only, so it
+		// is logged at warn rather than info.
+		h.logger.Warn("lan.network_changed", "enabled", *body.Enabled,
+			"detail", "takes effect at the next start")
+		writeJSON(w, http.StatusOK, h.devicesResponse())
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeJSONMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "Use GET or POST.")
+	}
 }
 
 // serveDevices is the owner's view: everything waiting, and everything decided.
@@ -194,11 +252,14 @@ func (h *lanHandler) serveDevices(w http.ResponseWriter, r *http.Request) {
 // devicesResponse is the owner's view, shared by every endpoint that changes it
 // so the page never has to guess what happened.
 func (h *lanHandler) devicesResponse() lanDevicesResponse {
+	enabled := h.store.NetworkEnabled()
 	return lanDevicesResponse{
-		Devices:     h.store.Devices(),
-		Pending:     h.store.Pending(),
-		RequestPath: lanRequestPath,
-		PollPath:    lanRequestPrefix,
+		Devices:         h.store.Devices(),
+		Pending:         h.store.Pending(),
+		NetworkEnabled:  enabled,
+		RestartRequired: h.boundToNetwork != enabled,
+		RequestPath:     lanRequestPath,
+		PollPath:        lanRequestPrefix,
 	}
 }
 

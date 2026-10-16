@@ -305,6 +305,9 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		store:       lanStore,
 		authService: authService,
 		logger:      dependencies.Logger,
+		// Whether this process is actually listening for the network, so a
+		// change on the page can say honestly that it needs a restart.
+		boundToNetwork: boundToNetwork(cfg.HTTP.Address),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("configure local-network access: %w", err)
@@ -367,6 +370,21 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	cleanupTelegramDownloads = false
 	cleanupGlobalCache = false
 	return application, nil
+}
+
+// boundToNetwork reports whether an address will accept connections from the
+// local network, which is what makes "restart required" a statement of fact.
+func boundToNetwork(address string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.Trim(host, "[]")) {
+	case "", "0.0.0.0", "::":
+		return true
+	default:
+		return false
+	}
 }
 
 // widenToNetwork turns a loopback bind into one the local network can reach.

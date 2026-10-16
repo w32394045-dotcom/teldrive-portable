@@ -59,6 +59,13 @@ const SETTINGS_GROUPS = [
         icon: ShieldIcon,
         capability: "system.manageUsers",
       },
+      // Who else on the network may use this drive, and only an owner decides.
+      {
+        label: "Local network",
+        path: "/settings/lan",
+        icon: PlugIcon,
+        capability: "system.manageUsers",
+      },
     ],
   },
   {

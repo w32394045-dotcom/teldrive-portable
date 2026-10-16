@@ -16,6 +16,7 @@ export const queryKeys = {
   backupConfig: ["backup-config"] as const,
   backupSnapshots: ["backup-snapshots"] as const,
   vault: ["settings-vault"] as const,
+  lanAccess: ["lan-access"] as const,
   autostart: ["system-autostart"] as const,
   webdavMount: ["system-webdav-mount"] as const,
 };
