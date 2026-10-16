@@ -88,12 +88,21 @@ func (h *systemHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // authorize resolves the browser session and requires an owner or administrator,
 // matching the WebDAV toggle itself.
 func (h *systemHandler) authorize(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	return authorizeManager(w, r, h.auth,
+		"Only an instance owner or administrator can change system integration.")
+}
+
+// authorizeManager is the shared gate for the browser-facing settings endpoints
+// that live outside the generated contract. It reads the session cookie, resolves
+// the identity and requires an owner or administrator role, answering the request
+// itself on failure so callers only have to check the boolean.
+func authorizeManager(w http.ResponseWriter, r *http.Request, auth *authn.Service, forbidden string) (int64, bool) {
 	cookie, err := r.Cookie(accessCookieName)
 	if err != nil || strings.TrimSpace(cookie.Value) == "" {
 		writeJSONMessage(w, http.StatusUnauthorized, "unauthenticated", "Sign in to change this setting.")
 		return 0, false
 	}
-	identity, err := h.auth.AuthenticateBearer(r.Context(), cookie.Value)
+	identity, err := auth.AuthenticateBearer(r.Context(), cookie.Value)
 	if err != nil {
 		writeJSONMessage(w, http.StatusUnauthorized, "unauthenticated", "Sign in to change this setting.")
 		return 0, false
@@ -106,8 +115,7 @@ func (h *systemHandler) authorize(w http.ResponseWriter, r *http.Request) (int64
 		}
 	}
 	if !manager {
-		writeJSONMessage(w, http.StatusForbidden, "forbidden",
-			"Only an instance owner or administrator can change system integration.")
+		writeJSONMessage(w, http.StatusForbidden, "forbidden", forbidden)
 		return 0, false
 	}
 	return identity.UserID, true

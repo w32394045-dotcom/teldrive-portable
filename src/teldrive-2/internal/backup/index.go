@@ -94,6 +94,11 @@ type Part struct {
 	StoredSize *int64 `json:"storedSize,omitempty"`
 	Checksum   string `json:"checksum,omitempty"`
 	Salt       string `json:"salt,omitempty"`
+	// BlockHashes carries the per-block digests Telegram stored with the part.
+	// They are a verification aid rather than data, but losing them would make a
+	// restored part unverifiable, so they travel in the backup too. JSON encodes
+	// the raw bytes as base64.
+	BlockHashes []byte `json:"blockHashes,omitempty"`
 }
 
 // BuildIndex reads the drive index for one user.
@@ -251,14 +256,15 @@ func fileFromRow(row *sqlcgen.File) File {
 
 func partFromRow(row *sqlcgen.FilePart) Part {
 	return Part{
-		FileID:     uuidString(row.FileID),
-		PartNo:     row.PartNo,
-		ChannelID:  row.ChannelID,
-		MessageID:  row.MessageID,
-		PlainSize:  optInt64(row.PlainSize),
-		StoredSize: optInt64(row.StoredSize),
-		Checksum:   optText(row.Checksum),
-		Salt:       optText(row.Salt),
+		FileID:      uuidString(row.FileID),
+		PartNo:      row.PartNo,
+		ChannelID:   row.ChannelID,
+		MessageID:   row.MessageID,
+		PlainSize:   optInt64(row.PlainSize),
+		StoredSize:  optInt64(row.StoredSize),
+		Checksum:    optText(row.Checksum),
+		Salt:        optText(row.Salt),
+		BlockHashes: row.BlockHashes,
 	}
 }
 

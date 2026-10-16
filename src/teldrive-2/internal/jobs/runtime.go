@@ -350,6 +350,12 @@ func (r *Runtime) SyncBackupPeriodicJob(ctx context.Context, enabled bool, inter
 	if err != nil {
 		return fmt.Errorf("marshal backup periodic args: %w", err)
 	}
+	// Insert refuses an id that already exists, so changing the interval would
+	// silently keep the old schedule. Remove first to make this a real upsert;
+	// ErrNotFound just means there was nothing to replace.
+	if _, err := r.client.PeriodicJobDelete(ctx, BackupPeriodicID); err != nil && !errors.Is(err, rivertype.ErrNotFound) {
+		return fmt.Errorf("replace backup periodic job: %w", err)
+	}
 	if _, err := r.client.PeriodicJobInsert(ctx, &riverpro.PeriodicJobInsertOpts{
 		ID:    BackupPeriodicID,
 		Kind:  BackupKind,
@@ -363,7 +369,7 @@ func (r *Runtime) SyncBackupPeriodicJob(ctx context.Context, enabled bool, inter
 			CronExpression: "@every " + interval.String(),
 			CronTimezone:   maintenanceTimezone,
 		},
-	}); err != nil && !errors.Is(err, riverpro.ErrPeriodicJobAlreadyExists) {
+	}); err != nil {
 		return fmt.Errorf("upsert backup periodic job: %w", err)
 	}
 	return nil

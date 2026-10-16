@@ -73,6 +73,11 @@ type configFile struct {
 	// OwnerUserID is whose index gets written. The scheduled job carries it
 	// rather than enumerating users, so a periodic run costs nothing extra.
 	OwnerUserID int64 `json:"ownerUserId,omitempty"`
+	// RestoreMode is which of the two apply strategies the restore button uses.
+	// It is a setting rather than a per-request choice so the decision is made
+	// once, deliberately, and not in the middle of an emergency. It never causes
+	// a restore on its own: nothing but a confirmed request reads it.
+	RestoreMode string `json:"restoreMode,omitempty"`
 	// LastBackupAt and LastMessageID describe the newest snapshot, for the
 	// settings page and for finding the document after a restart.
 	LastBackupAt  string `json:"lastBackupAt,omitempty"`
@@ -86,6 +91,7 @@ type Settings struct {
 	Interval      string    `json:"interval"`
 	OwnerUserID   int64     `json:"ownerUserId,omitempty"`
 	ChannelID     int64     `json:"channelId"`
+	RestoreMode   string    `json:"restoreMode"`
 	LastBackupAt  time.Time `json:"lastBackupAt,omitempty"`
 	LastMessageID int64     `json:"lastMessageId,omitempty"`
 	LastSize      int64     `json:"lastSize,omitempty"`
@@ -118,6 +124,13 @@ func (s *Store) Load() error {
 		return nil
 	}
 	parsed.Interval = normalizeInterval(parsed.Interval)
+	// An unreadable mode falls back to the default rather than refusing to load
+	// the file: the value is only read when a restore is explicitly requested,
+	// and ParseRestoreMode rejects anything it does not recognise at that point.
+	if _, err := ParseRestoreMode(parsed.RestoreMode); err != nil {
+		s.logger.Warn("backup.config.restore_mode", "value", parsed.RestoreMode, "error", err)
+		parsed.RestoreMode = string(RestoreOverwrite)
+	}
 	s.mu.Lock()
 	s.value = parsed
 	s.mu.Unlock()
@@ -136,19 +149,35 @@ func (s *Store) Path() string {
 // normalised so callers never have to re-validate it.
 func (s *Store) Settings() Settings {
 	if s == nil {
-		return Settings{Interval: DefaultInterval.String()}
+		return Settings{Interval: DefaultInterval.String(), RestoreMode: string(RestoreOverwrite)}
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	// A missing file leaves the mode empty, so the normalisation has to happen
+	// here as well as at load time; this is the single place callers read it.
+	mode, err := ParseRestoreMode(s.value.RestoreMode)
+	if err != nil {
+		mode = RestoreOverwrite
+	}
 	return Settings{
 		Enabled:       s.value.Enabled,
 		Interval:      normalizeInterval(s.value.Interval),
 		OwnerUserID:   s.value.OwnerUserID,
 		ChannelID:     s.value.ChannelID,
+		RestoreMode:   string(mode),
 		LastBackupAt:  parseTime(s.value.LastBackupAt),
 		LastMessageID: s.value.LastMessageID,
 		LastSize:      s.value.LastSize,
 	}
+}
+
+// RestoreMode returns the configured apply strategy, defaulting to overwrite.
+func (s *Store) RestoreMode() RestoreMode {
+	mode, err := ParseRestoreMode(s.Settings().RestoreMode)
+	if err != nil {
+		return RestoreOverwrite
+	}
+	return mode
 }
 
 // Interval returns the configured period, falling back to the default.
@@ -186,6 +215,18 @@ func (s *Store) Configure(enabled bool, interval string, ownerUserID int64) erro
 		if ownerUserID > 0 {
 			value.OwnerUserID = ownerUserID
 		}
+	})
+}
+
+// SetRestoreMode records which apply strategy the restore button uses. The value
+// is validated before it is stored, so a bad submission is rejected at the
+// settings endpoint instead of quietly changing what a later restore does.
+func (s *Store) SetRestoreMode(mode RestoreMode) error {
+	if !mode.Valid() {
+		return fmt.Errorf("backup: unknown restore mode %q", mode)
+	}
+	return s.update(func(value *configFile) {
+		value.RestoreMode = string(mode)
 	})
 }
 

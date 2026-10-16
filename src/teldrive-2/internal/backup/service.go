@@ -196,6 +196,46 @@ func (s *Service) Download(ctx context.Context, userID, messageID, offset, lengt
 	})
 }
 
+// maxIndexBytes caps how much of a snapshot is read into memory. A drive index is
+// a few megabytes even for a large drive; the bound exists so a corrupt or
+// hostile document in the channel cannot exhaust the server.
+const maxIndexBytes = 256 << 20
+
+// LoadSnapshot downloads one stored snapshot and parses it.
+//
+// Reading is the only part of a restore that touches Telegram, and it happens
+// before anything is written, so a snapshot that cannot be fetched or does not
+// parse fails without having altered the catalog.
+func (s *Service) LoadSnapshot(ctx context.Context, userID, messageID int64) (*Index, error) {
+	if s == nil || s.storage == nil || s.store == nil {
+		return nil, ErrNotConfigured
+	}
+	if userID <= 0 {
+		return nil, fmt.Errorf("backup: invalid user %d", userID)
+	}
+	reader, err := s.Download(ctx, userID, messageID, 0, -1)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = reader.Close() }()
+
+	// Read one byte past the limit so hitting it is an error rather than a
+	// silently truncated document that then fails to parse for an unrelated
+	// reason.
+	payload, err := io.ReadAll(io.LimitReader(reader, maxIndexBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("backup: read snapshot: %w", err)
+	}
+	if len(payload) > maxIndexBytes {
+		return nil, fmt.Errorf("backup: snapshot is larger than %d MiB", maxIndexBytes>>20)
+	}
+	var index Index
+	if err := json.Unmarshal(payload, &index); err != nil {
+		return nil, fmt.Errorf("backup: decode snapshot: %w", err)
+	}
+	return &index, nil
+}
+
 // ensureChannel returns the snapshot channel, creating it on first use.
 func (s *Service) ensureChannel(ctx context.Context, userID int64) (int64, string, error) {
 	if existing := s.store.ChannelID(); existing != 0 {

@@ -25,6 +25,7 @@ type extraAPIConfig struct {
 	downloader     *transfer.Downloader
 	authService    *authn.Service
 	configStore    *webdav.ConfigStore
+	backupHandler  *backupHandler
 	httpAddress    string
 	executablePath string
 	logger         *slog.Logger
@@ -42,6 +43,7 @@ type extraAPI struct {
 	dav      http.Handler
 	settings http.Handler
 	system   http.Handler
+	backup   http.Handler
 }
 
 const (
@@ -94,6 +96,7 @@ func newExtraAPI(config extraAPIConfig) (*extraAPI, error) {
 		dav:      http.HandlerFunc(handler.ServeDAV),
 		settings: http.HandlerFunc(handler.ServeConfig),
 		system:   system,
+		backup:   config.backupHandler,
 	}, nil
 }
 
@@ -104,6 +107,10 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 	// the same CSRF treatment as the rest of the API.
 	settings := security.middleware(browserCSRFMiddleware(h.settings))
 	system := security.middleware(browserCSRFMiddleware(h.system))
+	var backup http.Handler
+	if h.backup != nil {
+		backup = security.middleware(browserCSRFMiddleware(h.backup))
+	}
 
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -111,6 +118,8 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 			settings.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, systemPathPrefix):
 			system.ServeHTTP(w, r)
+		case backup != nil && isBackupPath(r.URL.Path):
+			backup.ServeHTTP(w, r)
 		case isDAVPath(r.URL.Path):
 			dav.ServeHTTP(w, r)
 		default:
@@ -126,6 +135,17 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 // exactly and "/webdav/" as a prefix keeps a sibling such as "/webdavfoo" out.
 func isDAVPath(path string) bool {
 	return path == "/webdav" || strings.HasPrefix(path, "/webdav/")
+}
+
+// isBackupPath matches the snapshot settings API. Every path here is an exact
+// literal, so there is no prefix to get wrong.
+func isBackupPath(path string) bool {
+	switch path {
+	case backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath:
+		return true
+	default:
+		return false
+	}
 }
 
 // newConfigStore loads the WebDAV settings file. A missing file is the documented

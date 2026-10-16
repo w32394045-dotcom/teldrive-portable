@@ -21,6 +21,7 @@ import (
 
 	api "github.com/tgdrive/teldrive/v2/internal/api"
 	"github.com/tgdrive/teldrive/v2/internal/authn"
+	"github.com/tgdrive/teldrive/v2/internal/backup"
 	"github.com/tgdrive/teldrive/v2/internal/bots"
 	"github.com/tgdrive/teldrive/v2/internal/cache"
 	"github.com/tgdrive/teldrive/v2/internal/catalog"
@@ -60,6 +61,11 @@ type App struct {
 	events            *userevents.Service
 	telegramDownloads *telegramstore.DownloadClientPool
 	globalCache       cache.Cacher
+	logger            *slog.Logger
+	// syncBackupSchedule reconciles the periodic backup job with the saved
+	// settings. It is a field rather than a method because it closes over the
+	// store and the runtime, and it only runs once the workers are live.
+	syncBackupSchedule func(ctx context.Context) error
 
 	mu      sync.Mutex
 	running bool
@@ -72,6 +78,12 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	// One non-nil logger for the whole construction path: both the migration
+	// report and the startup schedule reconciliation log through it.
+	logger := dependencies.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if cfg.Database.AutoMigrateLegacy {
 		migrationVerifier, err := buildLegacyBotVerifier(cfg, dependencies.Logger)
 		if err != nil {
@@ -82,10 +94,6 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 			return nil, fmt.Errorf("migrate legacy database: %w", err)
 		}
 		if migrated {
-			logger := dependencies.Logger
-			if logger == nil {
-				logger = slog.Default()
-			}
 			logger.Info("database.legacy_migration.completed",
 				"users", report.Users,
 				"channels", report.Channels,
@@ -197,9 +205,17 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		return nil, fmt.Errorf("create share service: %w", err)
 	}
 	healthService := health.NewService(dependencies.Version, pool)
-	jobRuntime, err := jobs.NewRuntimeWithServices(
+	// The snapshot store and service are built before the job runtime because the
+	// backup worker is a thin wrapper around this same service.
+	backupStore, err := newBackupStore(dependencies.Logger)
+	if err != nil {
+		return nil, err
+	}
+	backupService := backup.NewService(sqlcgen.New(pool), storage, backupStore, dependencies.Logger)
+	jobRuntime, err := jobs.NewRuntimeWithBackup(
 		pool, storage, cfg.Database.Schema, botService, secureCipher, cfg.Uploads.SessionTTL,
 		jobs.UploaderServices{Catalog: catalogService, Uploads: uploadService, Pipeline: uploadPipeline, ActiveKeyVersion: cfg.Encryption.ActiveKeyVersion, LocalImportRoots: cfg.Uploads.LocalImportRoots},
+		backupService,
 		fileService,
 	)
 	if err != nil {
@@ -227,6 +243,17 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	if err != nil {
 		return nil, err
 	}
+	backupHandler, err := newBackupHandler(backupConfig{
+		service:     backupService,
+		restorer:    backup.NewRestorer(pool, dependencies.Logger),
+		store:       backupStore,
+		scheduler:   jobRuntime,
+		authService: authService,
+		logger:      dependencies.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure backups: %w", err)
+	}
 	extras, err := newExtraAPI(extraAPIConfig{
 		catalogService: catalogService,
 		uploadService:  uploadService,
@@ -234,6 +261,7 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		downloader:     downloader,
 		authService:    authService,
 		configStore:    configStore,
+		backupHandler:  backupHandler,
 		httpAddress:    cfg.HTTP.Address,
 		logger:         dependencies.Logger,
 	})
@@ -252,6 +280,7 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		events:            eventService,
 		telegramDownloads: telegram.downloadClients,
 		globalCache:       globalCache,
+		logger:            logger,
 		http: &http.Server{
 			Addr:              cfg.HTTP.Address,
 			Handler:           rootHandler,
@@ -260,6 +289,19 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 			WriteTimeout:      cfg.HTTP.WriteTimeout,
 			IdleTimeout:       cfg.HTTP.IdleTimeout,
 		},
+	}
+	// The schedule lives in River, but which schedule it should be lives in the
+	// settings file, so the two have to be reconciled after every start.
+	application.syncBackupSchedule = func(ctx context.Context) error {
+		settings := backupStore.Settings()
+		if settings.OwnerUserID <= 0 {
+			if settings.Enabled {
+				logger.Warn("backup.schedule.skipped",
+					"reason", "backups are enabled but no owner is recorded; save the backup settings once to fix it")
+			}
+			return nil
+		}
+		return jobRuntime.SyncBackupPeriodicJob(ctx, settings.Enabled, backupStore.Interval(), settings.OwnerUserID)
 	}
 	cleanupPool = false
 	cleanupTelegramDownloads = false
@@ -371,6 +413,18 @@ func (a *App) Serve(ctx context.Context, listener net.Listener) error {
 			closeCtx, cancel := context.WithTimeout(context.Background(), a.config.HTTP.ShutdownTimeout)
 			defer cancel()
 			return errors.Join(err, a.events.Close(closeCtx))
+		}
+		// Reconcile the backup schedule now that the client is live. A failure
+		// here is logged rather than fatal: the server is otherwise healthy and
+		// saving the backup settings again repairs the schedule.
+		if a.syncBackupSchedule != nil {
+			if err := a.syncBackupSchedule(ctx); err != nil {
+				startupLogger := a.logger
+				if startupLogger == nil {
+					startupLogger = slog.Default()
+				}
+				startupLogger.Error("backup.schedule.startup_failed", "error", err)
+			}
 		}
 	}
 	a.http.BaseContext = func(net.Listener) context.Context { return ctx }
