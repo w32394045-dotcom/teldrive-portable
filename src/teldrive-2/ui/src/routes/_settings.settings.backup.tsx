@@ -1,12 +1,15 @@
-﻿import {
+import {
+  Accordion,
   Button,
   Chip,
+  Input,
   Label,
   ListBox,
   Modal,
   Select,
   Spinner,
   Switch,
+  TextField,
   Typography,
 } from "@heroui/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -21,6 +24,7 @@ import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/s
 import {
   type BackupSnapshot,
   backupConfigQueryOptions,
+  inspectBackup,
   type RestoreMode,
   restoreBackup,
   runBackupNow,
@@ -62,6 +66,9 @@ function BackupSettings() {
   const [snapshots, setSnapshots] = useState<BackupSnapshot[] | null>(null);
   const [pendingRestore, setPendingRestore] = useState<BackupSnapshot | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [passphrase, setPassphrase] = useState("");
+  const [restorePassphrase, setRestorePassphrase] = useState("");
+  const [needsRestorePassphrase, setNeedsRestorePassphrase] = useState(false);
 
   const save = useMutation({
     mutationFn: updateBackupConfig,
@@ -101,13 +108,13 @@ function BackupSettings() {
 
   const restore = useMutation({
     mutationFn: (snapshot: BackupSnapshot) =>
-      restoreBackup(snapshot.messageId, config.data?.restoreMode ?? "overwrite"),
+      restoreBackup(snapshot.messageId, config.data?.restoreMode ?? "overwrite", restorePassphrase),
     onSuccess: (result) => {
       setPendingRestore(null);
       setAcknowledged(false);
       toast.success(t("The drive was restored."), {
         description: t(
-          "Files {{files}} 路 folders {{folders}} 路 parts {{parts}} 路 deleted {{deleted}}",
+          "Files {{files}} · folders {{folders}} · parts {{parts}} · deleted {{deleted}}",
           {
             files: result.files,
             folders: result.folders,
@@ -121,7 +128,41 @@ function BackupSettings() {
       void getQueryClient().invalidateQueries({ queryKey: queryKeys.backupConfig });
     },
     onError: (error) => {
+      // A sealed snapshot the stored passphrase does not open comes back asking
+      // for one. Rather than failing the restore, reopen the dialog with the
+      // passphrase field, which is the only place the user can fix it.
+      if (userMessage(error).toLowerCase().includes("password")) {
+        setNeedsRestorePassphrase(true);
+        toast.error(t("This snapshot needs its passphrase"), {
+          description: t("Type the passphrase this snapshot was sealed with, then restore again."),
+        });
+        return;
+      }
       toast.error(t("The snapshot could not be restored"), { description: userMessage(error) });
+    },
+  });
+
+  /**
+   * Inspecting before restoring is what turns "this snapshot is encrypted" from
+   * a failure at the last moment into a question asked while the passphrase is
+   * still at hand.
+   */
+  const inspect = useMutation({
+    mutationFn: (snapshot: BackupSnapshot) => inspectBackup(snapshot.messageId, restorePassphrase),
+    onSuccess: (summary) => {
+      // It opened, so whatever passphrase was used is the right one.
+      setNeedsRestorePassphrase(false);
+      toast.success(t("Snapshot opened"), {
+        description: t("{{files}} files · {{folders}} folders · {{parts}} parts", {
+          files: summary.counts.files,
+          folders: summary.counts.folders,
+          parts: summary.counts.parts,
+        }),
+      });
+    },
+    onError: (error) => {
+      setNeedsRestorePassphrase(true);
+      toast.error(t("This snapshot needs its passphrase"), { description: userMessage(error) });
     },
   });
 
@@ -280,7 +321,7 @@ function BackupSettings() {
               description={
                 snapshot.size === undefined
                   ? undefined
-                  : `${formatBytes(snapshot.size)} 路 #${snapshot.messageId}`
+                  : `${formatBytes(snapshot.size)} · #${snapshot.messageId}`
               }
             >
               <div className="flex items-center justify-end gap-3">
@@ -306,6 +347,148 @@ function BackupSettings() {
             </SettingsRow>
           ))
         )}
+      </SettingsSection>
+
+      <SettingsSection
+        title={t("Sealing")}
+        description={t(
+          "A snapshot is the one file that can rebuild the whole drive. With a passphrase it is stored as ciphertext, so the channel it sits in is not enough to read it.",
+        )}
+      >
+        <SettingsRow
+          label={t("Passphrase")}
+          description={t(
+            "At least {{count}} characters. Leave it empty to store snapshots as plain JSON.",
+            {
+              count: settings?.minimumPasswordLength ?? 8,
+            },
+          )}
+          align="start"
+        >
+          <div className="flex w-full flex-col items-end gap-3">
+            <div className="flex w-full items-center justify-end gap-3">
+              {settings?.passwordSet ? (
+                <Chip color="success" variant="tertiary">
+                  {t("Enabled")}
+                </Chip>
+              ) : (
+                <Chip color="warning" variant="tertiary">
+                  {t("Disabled")}
+                </Chip>
+              )}
+              <TextField className="w-64">
+                <Label className="sr-only">{t("Passphrase")}</Label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={passphrase}
+                  placeholder={settings?.passwordSet ? "••••••••" : t("Passphrase")}
+                  onChange={(event) => setPassphrase(event.currentTarget.value)}
+                />
+              </TextField>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="tertiary"
+                isDisabled={busy}
+                onPress={() => {
+                  // The alphabet behind this leaves out the characters people
+                  // misread when copying a key by hand.
+                  setPassphrase(randomPassphrase(20));
+                }}
+              >
+                {t("Generate")}
+              </Button>
+              <Button
+                variant="secondary"
+                isDisabled={busy || passphrase.length === 0}
+                onPress={() => {
+                  save.mutate({ password: passphrase });
+                  setPassphrase("");
+                }}
+              >
+                {t("Save passphrase")}
+              </Button>
+              {settings?.passwordSet ? (
+                <Button
+                  variant="tertiary"
+                  isDisabled={busy}
+                  onPress={() => save.mutate({ password: "" })}
+                >
+                  {t("Stop sealing")}
+                </Button>
+              ) : null}
+            </div>
+            {settings?.content.encryptionKeys && !settings.passwordSet ? (
+              <Typography.Paragraph className="text-right text-xs leading-relaxed text-warning">
+                {t(
+                  "The encryption keys are switched on and no passphrase is set, so they are stored in the clear. Anyone who can read the backup channel can decrypt every file.",
+                )}
+              </Typography.Paragraph>
+            ) : null}
+          </div>
+        </SettingsRow>
+
+        <SettingsRow label={t("Snapshot contents")} align="start">
+          <div className="w-full">
+            <Accordion hideSeparator className="w-full">
+              <Accordion.Item id="backup-contents">
+                <Accordion.Heading>
+                  <Accordion.Trigger className="rounded-lg text-xs font-medium text-muted hover:text-foreground">
+                    {selectedContentLabels(
+                      settings?.content ?? { encryptionKeys: false, users: false },
+                    )}
+                    <Accordion.Indicator />
+                  </Accordion.Trigger>
+                </Accordion.Heading>
+                <Accordion.Panel>
+                  <Accordion.Body>
+                    <div className="flex flex-col gap-4 border-border border-t pt-4">
+                      <Switch
+                        aria-label={t("Encryption keys")}
+                        isSelected={settings?.content.encryptionKeys ?? false}
+                        isDisabled={busy || settings?.secretsAvailable === false}
+                        onChange={(isSelected) =>
+                          save.mutate({ content: { encryptionKeys: isSelected } })
+                        }
+                      >
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                          <Label className="text-xs leading-relaxed">{t("Encryption keys")}</Label>
+                        </Switch.Content>
+                      </Switch>
+                      <Typography.Paragraph className="text-xs leading-relaxed text-muted">
+                        {t(
+                          "The keys that decrypt stored parts live in config.toml, not in the database, so a database loss loses them. Without them an encrypted drive survives as ciphertext nobody can read.",
+                        )}
+                      </Typography.Paragraph>
+                      <Switch
+                        aria-label={t("Accounts")}
+                        isSelected={settings?.content.users ?? false}
+                        isDisabled={busy}
+                        onChange={(isSelected) => save.mutate({ content: { users: isSelected } })}
+                      >
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                          <Label className="text-xs leading-relaxed">{t("Accounts")}</Label>
+                        </Switch.Content>
+                      </Switch>
+                      <Typography.Paragraph className="text-xs leading-relaxed text-muted">
+                        {t(
+                          "The account rows the catalog references. Rebuilding on a fresh database needs them before any file can be put back. An account that already exists keeps its role.",
+                        )}
+                      </Typography.Paragraph>
+                    </div>
+                  </Accordion.Body>
+                </Accordion.Panel>
+              </Accordion.Item>
+            </Accordion>
+          </div>
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection
@@ -369,7 +552,7 @@ function BackupSettings() {
                 {t("Restoring rewrites the whole drive and cannot be undone.")}
               </Typography.Paragraph>
               <Typography.Paragraph className="text-sm">
-                {pendingRestore ? formatMoment(pendingRestore.createdAt) : ""} 路{" "}
+                {pendingRestore ? formatMoment(pendingRestore.createdAt) : ""} ·{" "}
                 {t(MODE_LABELS[mode])}
               </Typography.Paragraph>
               <Typography.Paragraph className="text-xs leading-relaxed text-muted">
@@ -379,6 +562,20 @@ function BackupSettings() {
                       "Overwrite deletes everything that is not in the snapshot and rebuilds the drive from it.",
                     )}
               </Typography.Paragraph>
+              {needsRestorePassphrase ? (
+                <TextField>
+                  <Label className="text-xs">{t("Passphrase")}</Label>
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    value={restorePassphrase}
+                    onChange={(event) => setRestorePassphrase(event.currentTarget.value)}
+                  />
+                  <Typography.Paragraph className="mt-1 text-xs leading-relaxed text-muted">
+                    {t("Type the passphrase this snapshot was sealed with, then restore again.")}
+                  </Typography.Paragraph>
+                </TextField>
+              ) : null}
               {mode === "overwrite" ? (
                 <div className="flex items-start gap-3">
                   <Switch
@@ -401,7 +598,32 @@ function BackupSettings() {
                   </Switch>
                 </div>
               ) : null}
+              {inspect.data ? (
+                <div className="rounded-lg border border-border p-3">
+                  <Typography.Paragraph className="text-xs leading-relaxed text-muted">
+                    {t("{{files}} files · {{folders}} folders · {{parts}} parts", {
+                      files: inspect.data.counts.files,
+                      folders: inspect.data.counts.folders,
+                      parts: inspect.data.counts.parts,
+                    })}
+                  </Typography.Paragraph>
+                  <Typography.Paragraph className="mt-1 text-xs leading-relaxed text-muted">
+                    {inspect.data.secretsIncluded ? t("Encryption keys") : t("Catalog only")}
+                    {" · "}
+                    {inspect.data.users > 0 ? t("Accounts") : t("Catalog only")}
+                  </Typography.Paragraph>
+                </div>
+              ) : null}
               <div className="flex justify-end gap-3">
+                <Button
+                  variant="tertiary"
+                  isDisabled={inspect.isPending || restore.isPending || pendingRestore === null}
+                  onPress={() => {
+                    if (pendingRestore) inspect.mutate(pendingRestore);
+                  }}
+                >
+                  {inspect.isPending ? t("Scanning") : t("Inspect")}
+                </Button>
                 <Button
                   variant="tertiary"
                   isDisabled={restore.isPending}
@@ -432,6 +654,30 @@ function BackupSettings() {
       </Modal.Backdrop>
     </>
   );
+}
+
+/** selectedContentLabels summarises the accordion in its collapsed state, so the
+ * choice is visible without opening it. */
+function selectedContentLabels(content: { encryptionKeys: boolean; users: boolean }): string {
+  const chosen: string[] = [];
+  if (content?.encryptionKeys) chosen.push(t("Encryption keys"));
+  if (content?.users) chosen.push(t("Accounts"));
+  return chosen.length > 0 ? chosen.join(" · ") : t("Catalog only");
+}
+
+/** randomPassphrase mirrors the server's generator. The alphabet leaves out
+ * 0/O and 1/l/I, which are the characters people misread when copying a key by
+ * hand, and the length sits inside the range the server accepts. */
+const PASSPHRASE_ALPHABET = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function randomPassphrase(length: number): string {
+  const bytes = new Uint32Array(length);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (const value of bytes) {
+    out += PASSPHRASE_ALPHABET[value % PASSPHRASE_ALPHABET.length];
+  }
+  return out;
 }
 
 /** lastSnapshot turns the recorded last backup into a one-row list, so the page
