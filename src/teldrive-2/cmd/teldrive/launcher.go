@@ -59,6 +59,11 @@ func launchBundled(ctx context.Context, out io.Writer, quiet bool) error {
 	if err != nil {
 		return err
 	}
+	// Before anything reads the configuration: a sealed database URL has to be
+	// in place before the launcher starts PostgreSQL from it.
+	if _, err := app.UnlockVault(ctx, &cfg, nil); err != nil {
+		return err
+	}
 	logger, err := logging.NewLogger(out, cfg.Logging.LogLevel, cfg.Logging.LogFormat)
 	if err != nil {
 		return err

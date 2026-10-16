@@ -127,15 +127,59 @@ func (h envelopeHeader) additionalData() ([]byte, error) {
 	return json.Marshal(h)
 }
 
+// EnvelopeInfo describes a sealed container without opening it.
+type EnvelopeInfo struct {
+	Format     string    `json:"format"`
+	Version    int       `json:"version"`
+	SealedAt   time.Time `json:"sealedAt"`
+	Iterations int       `json:"iterations"`
+}
+
+// SealMetadata reads a container's header without decrypting it.
+//
+// It exists so a caller can report what a sealed file is -- and, for the vault,
+// so the settings page can say whether anything is sealed without being able to
+// read it. The header is not trusted for anything but reporting: the password
+// check and the associated-data binding are what make it authoritative.
+func SealMetadata(format string, document []byte) (EnvelopeInfo, error) {
+	var file envelopeFile
+	if err := json.Unmarshal(document, &file); err != nil {
+		return EnvelopeInfo{}, fmt.Errorf("%w: %v", ErrEnvelopeInvalid, err)
+	}
+	if file.Format != format {
+		return EnvelopeInfo{}, fmt.Errorf("%w: unknown format %q", ErrEnvelopeInvalid, file.Format)
+	}
+	return EnvelopeInfo{
+		Format:     file.Format,
+		Version:    file.Version,
+		SealedAt:   file.Sealed,
+		Iterations: file.KDF.Iterations,
+	}, nil
+}
+
 // IsSealed reports whether a stored document is a sealed container.
-func IsSealed(document []byte) bool {
+func IsSealed(document []byte) bool { return IsSealedAs(EnvelopeFormat, document) }
+
+// IsSealedAs is IsSealed for a container that names itself something else, so a
+// reader can tell a sealed snapshot from a sealed vault without guessing.
+func IsSealedAs(format string, document []byte) bool {
 	var probe struct {
 		Format string `json:"format"`
 	}
 	if err := json.Unmarshal(document, &probe); err != nil {
 		return false
 	}
-	return probe.Format == EnvelopeFormat
+	return probe.Format == format
+}
+
+// SealAs seals a document under a different container name.
+//
+// The vault protects the instance's own secrets rather than a snapshot, and a
+// file that says it is a Teldrive index when it is not would be a trap for
+// whoever opens it during a recovery. The cryptography is deliberately shared:
+// one implementation of the envelope is one place for a mistake to be.
+func SealAs(format string, plaintext []byte, password string, now time.Time) ([]byte, error) {
+	return sealAs(format, EnvelopeVersion, plaintext, password, now)
 }
 
 // Seal encrypts a snapshot with a password.
@@ -145,6 +189,10 @@ func IsSealed(document []byte) bool {
 // or silently invent a key nobody knows. Callers that care are expected to warn
 // the user instead.
 func Seal(plaintext []byte, password string, now time.Time) ([]byte, error) {
+	return SealAs(EnvelopeFormat, plaintext, password, now)
+}
+
+func sealAs(format string, version int, plaintext []byte, password string, now time.Time) ([]byte, error) {
 	if password == "" {
 		return plaintext, nil
 	}
@@ -173,8 +221,8 @@ func Seal(plaintext []byte, password string, now time.Time) ([]byte, error) {
 	}
 
 	header := envelopeHeader{
-		Format:  EnvelopeFormat,
-		Version: EnvelopeVersion,
+		Format:  format,
+		Version: version,
 		Sealed:  now.UTC(),
 		KDF: kdfParams{
 			Algorithm:  kdfName,
@@ -208,7 +256,16 @@ func Seal(plaintext []byte, password string, now time.Time) ([]byte, error) {
 // A document that is not sealed is returned as-is, so this is safe to call on
 // every load rather than making callers detect the format first.
 func Unseal(document []byte, password string) ([]byte, error) {
-	if !IsSealed(document) {
+	return UnsealAs(EnvelopeFormat, document, password)
+}
+
+// UnsealAs is Unseal for a container that names itself something else.
+func UnsealAs(format string, document []byte, password string) ([]byte, error) {
+	return unsealAs(format, EnvelopeVersion, document, password)
+}
+
+func unsealAs(format string, version int, document []byte, password string) ([]byte, error) {
+	if !IsSealedAs(format, document) {
 		return document, nil
 	}
 	var file envelopeFile
@@ -216,10 +273,10 @@ func Unseal(document []byte, password string) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %v", ErrEnvelopeInvalid, err)
 	}
 	header := file.envelopeHeader
-	if header.Format != EnvelopeFormat {
+	if header.Format != format {
 		return nil, fmt.Errorf("%w: unknown format %q", ErrEnvelopeInvalid, header.Format)
 	}
-	if header.Version != EnvelopeVersion {
+	if header.Version != version {
 		return nil, fmt.Errorf("%w: container version %d is not supported", ErrEnvelopeInvalid, header.Version)
 	}
 	if header.KDF.Algorithm != kdfName || !strings.EqualFold(header.KDF.Hash, "SHA-256") {

@@ -94,6 +94,11 @@ func newRunCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// The vault, when this machine has one, replaces the secrets before
+			// any of them is read.
+			if _, err := app.UnlockVault(cmd.Context(), &cfg, nil); err != nil {
+				return err
+			}
 			logger, err := logging.NewLogger(os.Stdout, cfg.Logging.LogLevel, cfg.Logging.LogFormat)
 			if err != nil {
 				return err
