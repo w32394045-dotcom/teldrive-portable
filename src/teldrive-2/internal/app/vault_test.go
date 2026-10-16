@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -178,5 +179,70 @@ func TestUnlockVaultRoundTripsThroughTheRealPaths(t *testing.T) {
 	}
 	if cfg.Encryption.ActiveKeyVersion != 1 || len(cfg.Encryption.Keys) != 1 {
 		t.Fatalf("the keys did not survive the round trip: %+v", cfg.Encryption)
+	}
+}
+
+// TestUnlockVaultWithKeyServesAShell is the prompt-mode shape: nothing on this
+// machine remembers the key, so only a person can supply one. The shell has to
+// be able to tell that it must ask, to survive a typo, and to get the same
+// result as a start that found the key on disk.
+func TestUnlockVaultWithKeyServesAShell(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	if err := os.WriteFile(filepath.Join(root, "config.toml"),
+		[]byte("[http]\naddress = \"127.0.0.1:18787\"\n"), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+
+	store := vault.NewStore(vault.DefaultDataDir(), nil)
+	const key = "a-passphrase-somebody-typed"
+	if err := store.Seal(SecretsOf(sampleConfig()), key, vault.ModePrompt); err != nil {
+		t.Fatalf("seal the vault in prompt mode: %v", err)
+	}
+
+	// There is a vault and no key for it: that is exactly when a window has to
+	// appear, and exactly when a headless start has to refuse.
+	if !VaultNeedsKey() {
+		t.Fatal("VaultNeedsKey = false, but no key was ever remembered")
+	}
+	plain := sampleConfig()
+	if _, err := UnlockVault(context.Background(), &plain, nil); !errors.Is(err, vault.ErrLocked) {
+		t.Fatalf("UnlockVault without a key = %v, want ErrLocked", err)
+	}
+	if plain.Database.URL != "postgres://plaintext@127.0.0.1:5433/teldrive" {
+		t.Fatal("a refused start changed the configuration")
+	}
+
+	// A typo is answered, not fatal: the caller shows the box again.
+	typo := sampleConfig()
+	if _, err := UnlockVaultWithKey(context.Background(), &typo, "not-the-key", nil); !errors.Is(err, vault.ErrKeyRejected) {
+		t.Fatalf("a wrong key = %v, want ErrKeyRejected", err)
+	}
+
+	cfg := sampleConfig()
+	unlocked, err := UnlockVaultWithKey(context.Background(), &cfg, key, nil)
+	if err != nil || !unlocked.Found || unlocked.Key != key {
+		t.Fatalf("UnlockVaultWithKey = %+v, %v", unlocked, err)
+	}
+	if cfg.Security.DataKey != "plaintext-data" || len(cfg.Encryption.Keys) != 1 {
+		t.Fatalf("the sealed secrets were not applied: %+v", cfg.Security)
+	}
+}
+
+// TestVaultNeedsKeyIsQuietWithoutAVault keeps the common case cheap and, more
+// importantly, keeps a machine that never used the feature from being asked for
+// a passphrase that does not exist.
+func TestVaultNeedsKeyIsQuietWithoutAVault(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if VaultNeedsKey() {
+		t.Fatal("VaultNeedsKey = true on a machine with no vault")
+	}
+	cfg := sampleConfig()
+	unlocked, err := UnlockVaultWithKey(context.Background(), &cfg, "anything", nil)
+	if err != nil || unlocked.Found {
+		t.Fatalf("unlocking without a vault = %+v, %v", unlocked, err)
+	}
+	if cfg.Security.SigningKey != "plaintext-signing" {
+		t.Fatal("a configuration was rewritten by an unlock that found nothing")
 	}
 }

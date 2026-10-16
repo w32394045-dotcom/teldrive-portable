@@ -45,7 +45,7 @@ jobs:
           bun install --frozen-lockfile --no-progress
           bun run build
 
-      - name: Build teldrive.exe (embeds ui/dist)
+      - name: Build teldrive.exe and teldrive-gui.exe (they embed ui/dist)
         working-directory: src/teldrive-2
         shell: pwsh
         run: |
@@ -57,6 +57,12 @@ jobs:
           go version
           go build -trimpath -ldflags "-s -w -X main.version=$version -X main.commit=$env:GITHUB_SHA -X main.date=$date" -o $out ./cmd/teldrive
           & $out version
+          # The shell is the entry point people actually double-click, so it is a
+          # GUI-subsystem binary: -H=windowsgui is what keeps a console window
+          # from appearing behind the tray icon.
+          $gui = Join-Path $env:GITHUB_WORKSPACE "$env:BUNDLE/teldrive-gui.exe"
+          go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$version -X main.commit=$env:GITHUB_SHA -X main.date=$date" -o $gui ./cmd/teldrive-gui
+          Get-Item $out, $gui | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
       - name: Fetch portable PostgreSQL (windows x86_64)
         shell: pwsh

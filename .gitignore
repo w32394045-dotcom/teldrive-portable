@@ -36,6 +36,8 @@ node_modules/
 /tools/ui-baseline/
 /tools/ui-baseline2/
 /src/tools/
+# 模块内的临时探针（例如给原生窗口截图的那个）不随包发布。
+/src/teldrive-2/tools/_*
 .bun-cache/
 chrometest/
 

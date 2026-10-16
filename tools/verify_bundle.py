@@ -16,6 +16,7 @@ import zipfile
 
 REQUIRED = [
     "teldrive.exe",
+    "teldrive-gui.exe",
     "config.toml",
     "使用说明.txt",
     "pgsql/bin/postgres.exe",
@@ -23,7 +24,7 @@ REQUIRED = [
     "pgsql/bin/pg_ctl.exe",
 ]
 
-# Launcher scripts are gone for good: teldrive.exe does the whole bring-up.
+# Launcher scripts are gone for good: the executables do the whole bring-up.
 RETIRED = ["start.bat", "stop.bat", "_open-browser.bat", "_init-keys.bat"]
 
 FORBIDDEN_PARTS = ("/data/", "pgdata", "postgres.log", "initdb.log", "/node_modules/")
@@ -44,6 +45,7 @@ def main(path: str) -> int:
 
         config_bytes = read("config.toml")
         exe_size = len(read("teldrive.exe"))
+        gui_size = len(read("teldrive-gui.exe"))
         pg_size = len(read("pgsql/bin/postgres.exe"))
 
     problems = []
@@ -62,7 +64,7 @@ def main(path: str) -> int:
         if f"{root}/{retired}" in names:
             problems.append(
                 f"retired launcher script shipped: {retired} "
-                "(the bundle must have exactly one entry point: teldrive.exe)"
+                "(the bundle must have no .bat entry point: the executables do the bring-up)"
             )
 
     for name in names:
@@ -81,14 +83,17 @@ def main(path: str) -> int:
 
     if exe_size < 20_000_000:
         problems.append(f"teldrive.exe looks too small ({exe_size} bytes)")
+    if gui_size < 20_000_000:
+        problems.append(f"teldrive-gui.exe looks too small ({gui_size} bytes)")
     if pg_size < 1_000_000:
         problems.append(f"postgres.exe looks too small ({pg_size} bytes)")
 
     print(f"entries        : {len(names)}")
     print(f"top-level      : {root}")
     print(f"teldrive.exe   : {exe_size / 1048576:.1f} MB")
+    print(f"teldrive-gui.exe: {gui_size / 1048576:.1f} MB")
     print(f"postgres.exe   : {pg_size / 1048576:.1f} MB")
-    print(f"launcher scripts: none (single entry point: teldrive.exe)")
+    print(f"launcher scripts: none (double-click the shell, or run teldrive.exe)")
     if problems:
         print("\nBUNDLE VERIFICATION FAILED:")
         for row in problems:

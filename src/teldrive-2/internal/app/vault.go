@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/tgdrive/teldrive/v2/internal/config"
 	"github.com/tgdrive/teldrive/v2/internal/vault"
@@ -33,6 +35,32 @@ type Unlocked struct {
 // drive with the plaintext configuration, which after a key change holds values
 // that are wrong in a way nothing else would notice.
 func UnlockVault(ctx context.Context, cfg *config.Config, logger *slog.Logger) (Unlocked, error) {
+	return unlockVault(ctx, cfg, "", logger)
+}
+
+// VaultNeedsKey reports whether this machine holds sealed secrets and no key to
+// open them. It is the question a shell asks before it can start anything: the
+// answer decides whether a person has to be asked for the passphrase first.
+func VaultNeedsKey() bool {
+	store := vault.NewStore(vault.DefaultDataDir(), nil)
+	if !store.Exists() {
+		return false
+	}
+	_, err := store.AvailableKey()
+	return errors.Is(err, vault.ErrLocked)
+}
+
+// UnlockVaultWithKey opens the vault with a key the caller collected from a
+// person, which is the only thing a shell can do about ModePrompt. It reports
+// the same errors as UnlockVault, so a rejected key can be told apart from a
+// broken file and the prompt can be shown again.
+func UnlockVaultWithKey(ctx context.Context, cfg *config.Config, key string, logger *slog.Logger) (Unlocked, error) {
+	return unlockVault(ctx, cfg, key, logger)
+}
+
+// unlockVault applies the sealed secrets to the configuration. An empty key
+// means "use the one this machine remembers".
+func unlockVault(ctx context.Context, cfg *config.Config, key string, logger *slog.Logger) (Unlocked, error) {
 	if cfg == nil {
 		return Unlocked{}, nil
 	}
@@ -43,11 +71,14 @@ func UnlockVault(ctx context.Context, cfg *config.Config, logger *slog.Logger) (
 	if !store.Exists() {
 		return Unlocked{}, nil
 	}
-	key, err := store.AvailableKey()
-	if err != nil {
-		// The vault exists and its key does not. Only a shell can ask for it,
-		// so a headless start has to say so rather than run on the plaintext.
-		return Unlocked{Found: true}, fmt.Errorf("unlock the settings vault: %w", err)
+	if strings.TrimSpace(key) == "" {
+		available, err := store.AvailableKey()
+		if err != nil {
+			// The vault exists and its key does not. Only a shell can ask for it,
+			// so a headless start has to say so rather than run on the plaintext.
+			return Unlocked{Found: true}, fmt.Errorf("unlock the settings vault: %w", err)
+		}
+		key = available
 	}
 	found, err := vault.Unlock(ctx, store, key, func(secrets vault.Secrets) error {
 		applyVaultSecrets(cfg, secrets)
