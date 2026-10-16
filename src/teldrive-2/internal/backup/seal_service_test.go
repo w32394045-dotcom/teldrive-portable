@@ -149,6 +149,77 @@ func TestInspectDescribesWithoutTouchingAnything(t *testing.T) {
 	}
 }
 
+// TestCreateRefusesToWriteTheVaultKeyInTheClear is the one combination that
+// cannot be made safe. The vault key opens every other secret in the same file,
+// the file lands in a Telegram channel, and nothing takes it back.
+func TestCreateRefusesToWriteTheVaultKeyInTheClear(t *testing.T) {
+	service, store, storage := sealedService(t, "")
+	if err := store.SetContent(Content{VaultKey: true}); err != nil {
+		t.Fatalf("SetContent: %v", err)
+	}
+	service.SetVaultKey(testPassword)
+
+	if _, err := service.Create(context.Background(), 7); !errors.Is(err, ErrSecretsNeedSealing) {
+		t.Fatalf("err = %v, want ErrSecretsNeedSealing", err)
+	}
+	// Nothing may reach the channel, not even the parts of the snapshot that
+	// would have been harmless.
+	if storage.uploads != 0 {
+		t.Fatalf("uploads = %d, want none", storage.uploads)
+	}
+}
+
+// TestCreateCarriesTheVaultKeyInsideASealedSnapshot is the point of the section:
+// a machine rebuilt from this snapshot can read the secrets it also carries.
+func TestCreateCarriesTheVaultKeyInsideASealedSnapshot(t *testing.T) {
+	service, store, storage := sealedService(t, testPassword)
+	if err := store.SetContent(Content{VaultKey: true}); err != nil {
+		t.Fatalf("SetContent: %v", err)
+	}
+	service.SetVaultKey("the-vault-key")
+
+	created, err := service.Create(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !IsSealed(storage.lastPayload) {
+		t.Fatal("a snapshot carrying the vault key must be sealed")
+	}
+	index, err := service.LoadSnapshot(context.Background(), 7, created.MessageID)
+	if err != nil {
+		t.Fatalf("LoadSnapshot: %v", err)
+	}
+	if index.VaultKey != "the-vault-key" {
+		t.Fatalf("vault key = %q", index.VaultKey)
+	}
+	if !index.Content.VaultKey {
+		t.Fatal("the selection was not recorded")
+	}
+}
+
+// TestCreateOmitsTheVaultKeyWhenTheMachineHasNone keeps an empty string from
+// claiming there is a vault.
+func TestCreateOmitsTheVaultKeyWhenTheMachineHasNone(t *testing.T) {
+	service, store, storage := sealedService(t, testPassword)
+	if err := store.SetContent(Content{VaultKey: true}); err != nil {
+		t.Fatalf("SetContent: %v", err)
+	}
+	created, err := service.Create(context.Background(), 7)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	index, err := service.LoadSnapshot(context.Background(), 7, created.MessageID)
+	if err != nil {
+		t.Fatalf("LoadSnapshot: %v", err)
+	}
+	if index.VaultKey != "" {
+		t.Fatalf("vault key = %q, want none", index.VaultKey)
+	}
+	if strings.Contains(string(storage.lastPayload), "vaultKey") {
+		t.Fatal("the sealed document mentions a vault key that does not exist")
+	}
+}
+
 func TestStorePasswordRoundTripsAndValidates(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "backup.json")
 	store := NewStore(path, nil)

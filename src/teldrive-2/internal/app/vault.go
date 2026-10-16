@@ -10,6 +10,16 @@ import (
 	"github.com/tgdrive/teldrive/v2/internal/vault"
 )
 
+// Unlocked describes what a start found on this machine.
+type Unlocked struct {
+	// Found reports whether a vault exists and was opened.
+	Found bool
+	// Key is the key that opened it, so a snapshot can carry it and a rebuilt
+	// machine can read the secrets that snapshot also carries. It is empty when
+	// there is no vault.
+	Key string
+}
+
 // UnlockVault replaces the configuration's secrets with the sealed ones, if this
 // machine has a vault.
 //
@@ -22,26 +32,32 @@ import (
 // exists but cannot be opened is fatal on purpose: carrying on would start the
 // drive with the plaintext configuration, which after a key change holds values
 // that are wrong in a way nothing else would notice.
-func UnlockVault(ctx context.Context, cfg *config.Config, logger *slog.Logger) (bool, error) {
+func UnlockVault(ctx context.Context, cfg *config.Config, logger *slog.Logger) (Unlocked, error) {
 	if cfg == nil {
-		return false, nil
+		return Unlocked{}, nil
 	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 	store := vault.NewStore(vault.DefaultDataDir(), logger)
 	if !store.Exists() {
-		return false, nil
+		return Unlocked{}, nil
 	}
-	found, err := vault.Unlock(ctx, store, "", func(secrets vault.Secrets) error {
+	key, err := store.AvailableKey()
+	if err != nil {
+		// The vault exists and its key does not. Only a shell can ask for it,
+		// so a headless start has to say so rather than run on the plaintext.
+		return Unlocked{Found: true}, fmt.Errorf("unlock the settings vault: %w", err)
+	}
+	found, err := vault.Unlock(ctx, store, key, func(secrets vault.Secrets) error {
 		applyVaultSecrets(cfg, secrets)
 		return nil
 	})
 	if err != nil {
-		return found, fmt.Errorf("unlock the settings vault: %w", err)
+		return Unlocked{Found: found}, fmt.Errorf("unlock the settings vault: %w", err)
 	}
 	logger.Info("vault.unlocked", "secrets", describeVaultSecrets(cfg))
-	return found, nil
+	return Unlocked{Found: found, Key: key}, nil
 }
 
 // applyVaultSecrets copies the sealed values over the plaintext ones.

@@ -461,8 +461,6 @@ func TestInspectNeedsASnapshot(t *testing.T) {
 	}
 }
 
-// TestIsBackupPathMatchesExactly keeps a lookalike path from being routed into
-// the backup handler, where the prefix would decide which endpoint runs.
 // TestSettingsContentMergesRatherThanReplaces is the same partial-update rule
 // applied to the content object: a page that only knows about one switch must
 // not clear the other.
@@ -511,6 +509,64 @@ func TestSettingsReportsWhetherSecretsExist(t *testing.T) {
 	}
 }
 
+// TestSettingsRefusesToCarryTheVaultKeyUnsealed is the settings-time half of the
+// rule: the request is refused before anything is written, so the page gets an
+// explanation rather than a scheduled job that fails every night.
+func TestSettingsRefusesToCarryTheVaultKeyUnsealed(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, nil)
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath,
+		strings.NewReader(`{"content": {"vaultKey": true}}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body %s)", recorder.Code, recorder.Body)
+	}
+	if code := errorCode(t, recorder); code != "sealing_required" {
+		t.Fatalf("code = %q, want sealing_required", code)
+	}
+	if store.Content().VaultKey {
+		t.Fatal("a refused update was still stored")
+	}
+}
+
+func TestSettingsRefusesToDropThePassphraseWhileCarryingTheVaultKey(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, func(store *backup.Store) {
+		if err := store.SetPassword("correct horse battery"); err != nil {
+			t.Fatalf("seed passphrase: %v", err)
+		}
+		if err := store.SetContent(backup.Content{VaultKey: true}); err != nil {
+			t.Fatalf("seed content: %v", err)
+		}
+	})
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath, strings.NewReader(`{"password": ""}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body %s)", recorder.Code, recorder.Body)
+	}
+	if !store.Settings().PasswordSet {
+		t.Fatal("a refused update cleared the passphrase")
+	}
+}
+
+// TestSettingsAcceptsTheVaultKeyOnceTheSnapshotIsSealed is the other direction,
+// including the case where the passphrase and the switch arrive together.
+func TestSettingsAcceptsTheVaultKeyOnceTheSnapshotIsSealed(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, nil)
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath,
+		strings.NewReader(`{"password": "correct horse battery", "content": {"vaultKey": true}}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", recorder.Code, recorder.Body)
+	}
+	if !store.Content().VaultKey || !store.Settings().PasswordSet {
+		t.Fatalf("content = %+v, passwordSet = %v", store.Content(), store.Settings().PasswordSet)
+	}
+}
+
+// TestIsBackupPathMatchesExactly keeps a lookalike path from being routed into
+// the backup handler, where the prefix would decide which endpoint runs.
 func TestIsBackupPathMatchesExactly(t *testing.T) {
 	for _, path := range []string{backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath, backupInspectPath} {
 		if !isBackupPath(path) {

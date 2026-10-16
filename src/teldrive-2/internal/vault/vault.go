@@ -204,6 +204,24 @@ func (s *Store) rememberedKey() string {
 	return strings.TrimSpace(string(raw))
 }
 
+// AvailableKey returns the remembered key, or an error explaining that only a
+// person can supply one.
+//
+// It exists so a caller can tell "there is no vault" from "there is a vault and
+// this start cannot open it" before it does any work.
+func (s *Store) AvailableKey() (string, error) {
+	if s == nil {
+		return "", ErrNoVault
+	}
+	if key := s.rememberedKey(); strings.TrimSpace(key) != "" {
+		return key, nil
+	}
+	if s.Exists() {
+		return "", ErrLocked
+	}
+	return "", ErrNoVault
+}
+
 // Open decrypts the vault.
 //
 // An empty key falls back to the remembered one, which is the normal path for a

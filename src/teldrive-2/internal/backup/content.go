@@ -19,10 +19,19 @@ type Content struct {
 	// a drive on a fresh database needs them before anything else can be put
 	// back.
 	Users bool `json:"users"`
+	// VaultKey includes the key that opens the instance's settings vault. It is
+	// the one section that is refused outright unless the snapshot is also
+	// sealed: on its own it is the key to every other secret in the same file,
+	// sitting in a Telegram channel.
+	VaultKey bool `json:"vaultKey"`
 }
 
 // Any reports whether at least one optional section is selected.
-func (c Content) Any() bool { return c.EncryptionKeys || c.Users }
+func (c Content) Any() bool { return c.EncryptionKeys || c.Users || c.VaultKey }
+
+// RequiresSealing reports whether the selection may only be written inside a
+// sealed snapshot.
+func (c Content) RequiresSealing() bool { return c.VaultKey }
 
 // Secrets is the server-side configuration a rebuild needs and the database does
 // not hold. It is written to config.toml, not to a table, which is exactly why

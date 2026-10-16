@@ -169,6 +169,7 @@ type settingsResponse struct {
 type contentBody struct {
 	EncryptionKeys *bool `json:"encryptionKeys"`
 	Users          *bool `json:"users"`
+	VaultKey       *bool `json:"vaultKey"`
 }
 
 func (c contentBody) applyTo(current backup.Content) backup.Content {
@@ -177,6 +178,9 @@ func (c contentBody) applyTo(current backup.Content) backup.Content {
 	}
 	if c.Users != nil {
 		current.Users = *c.Users
+	}
+	if c.VaultKey != nil {
+		current.VaultKey = *c.VaultKey
 	}
 	return current
 }
@@ -231,6 +235,22 @@ func (h *backupHandler) serveSettings(w http.ResponseWriter, r *http.Request, us
 					"The restore mode could not be saved: "+err.Error())
 				return
 			}
+		}
+		// Work out what the settings would become before writing anything, so a
+		// combination that must not be stored is refused cleanly rather than
+		// half-applied and then complained about.
+		nextPasswordSet := current.PasswordSet
+		if body.Password != nil {
+			nextPasswordSet = strings.TrimSpace(*body.Password) != ""
+		}
+		nextContent := current.Content
+		if body.Content != nil {
+			nextContent = body.Content.applyTo(nextContent)
+		}
+		if nextContent.RequiresSealing() && !nextPasswordSet {
+			writeJSONMessage(w, http.StatusBadRequest, "sealing_required",
+				backup.ErrSecretsNeedSealing.Error())
+			return
 		}
 		if body.Password != nil {
 			if err := h.store.SetPassword(*body.Password); err != nil {

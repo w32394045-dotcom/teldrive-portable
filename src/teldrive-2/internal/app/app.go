@@ -51,6 +51,10 @@ type Dependencies struct {
 	Authenticator api.Authenticator
 	Logger        *slog.Logger
 	Version       string
+	// VaultKey is the key that opened this machine's settings vault, when it has
+	// one. A snapshot may carry it so a rebuilt machine can read the secrets the
+	// snapshot also carries.
+	VaultKey string
 }
 
 type App struct {
@@ -215,6 +219,9 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	// The server-managed keys live in the configuration rather than the database,
 	// so the composition root is the only place that can hand them over.
 	backupService.SetSecrets(backupSecrets(cfg))
+	// The vault key travels with the secrets, but only reaches a snapshot when
+	// the settings ask for it and the snapshot is sealed.
+	backupService.SetVaultKey(dependencies.VaultKey)
 	jobRuntime, err := jobs.NewRuntimeWithBackup(
 		pool, storage, cfg.Database.Schema, botService, secureCipher, cfg.Uploads.SessionTTL,
 		jobs.UploaderServices{Catalog: catalogService, Uploads: uploadService, Pipeline: uploadPipeline, ActiveKeyVersion: cfg.Encryption.ActiveKeyVersion, LocalImportRoots: cfg.Uploads.LocalImportRoots},

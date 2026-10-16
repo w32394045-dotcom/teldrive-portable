@@ -88,6 +88,11 @@ var (
 	ErrPasswordBlank = errors.New("backup: the password cannot be only spaces")
 	// ErrEnvelopeInvalid reports a sealed container that cannot be trusted.
 	ErrEnvelopeInvalid = errors.New("backup: the encrypted snapshot header is not usable")
+	// ErrSecretsNeedSealing refuses a snapshot that would carry the vault key
+	// without also being sealed. The key opens every other secret in the same
+	// file, and the file lands in a Telegram channel where it stays.
+	ErrSecretsNeedSealing = errors.New(
+		"backup: the vault key can only be included in a snapshot that is sealed; set a passphrase first")
 )
 
 // kdfParams describe how the password became a key. They are stored in the file

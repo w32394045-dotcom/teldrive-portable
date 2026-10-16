@@ -57,6 +57,10 @@ type Index struct {
 	Secrets *Secrets `json:"secrets,omitempty"`
 	// Users carries the account rows when Content.Users is set.
 	Users []User `json:"users,omitempty"`
+	// VaultKey carries the key that opens the instance's settings vault, so a
+	// machine rebuilt from this snapshot can read the secrets it also carries.
+	// It is only ever written inside a sealed snapshot; see Content.RequiresSealing.
+	VaultKey string `json:"vaultKey,omitempty"`
 	// Sealed is not part of the document. It records that the bytes on the wire
 	// were encrypted, which the plaintext itself cannot say, so a summary can
 	// report how a snapshot was stored.
@@ -163,6 +167,9 @@ func BuildIndex(ctx context.Context, queries Querier, userID int64, now time.Tim
 type BuildOptions struct {
 	Content Content
 	Secrets *Secrets
+	// VaultKey is the key that opens the settings vault, supplied by the caller
+	// because it belongs to the machine rather than to the database.
+	VaultKey string
 }
 
 // BuildIndexWith reads the drive index for one user.
@@ -214,6 +221,11 @@ func BuildIndexWith(ctx context.Context, queries Querier, userID int64, now time
 			return nil, err
 		}
 		index.Users = users
+	}
+	// The vault key is written only when there is one to write: an empty string
+	// would claim the machine had a vault and that it was empty.
+	if options.Content.VaultKey && options.VaultKey != "" {
+		index.VaultKey = options.VaultKey
 	}
 	index.Counts.Channels = len(channels)
 	index.Counts.Files = len(files)

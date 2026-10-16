@@ -131,9 +131,12 @@ func TestUnlockVaultWithoutAVaultDoesNothing(t *testing.T) {
 	cfg := sampleConfig()
 	before := cfg
 
-	found, err := UnlockVault(context.Background(), &cfg, nil)
-	if err != nil || found {
-		t.Fatalf("UnlockVault = %v, %v; want nothing found and no error", found, err)
+	unlocked, err := UnlockVault(context.Background(), &cfg, nil)
+	if err != nil || unlocked.Found {
+		t.Fatalf("UnlockVault = %+v, %v; want nothing found and no error", unlocked, err)
+	}
+	if unlocked.Key != "" {
+		t.Fatalf("a machine with no vault reported key %q", unlocked.Key)
 	}
 	if cfg.Security.SigningKey != before.Security.SigningKey {
 		t.Fatal("the configuration was changed with no vault present")
@@ -159,9 +162,14 @@ func TestUnlockVaultRoundTripsThroughTheRealPaths(t *testing.T) {
 	}
 
 	cfg := sampleConfig()
-	found, err := UnlockVault(context.Background(), &cfg, nil)
-	if err != nil || !found {
-		t.Fatalf("UnlockVault = %v, %v", found, err)
+	unlocked, err := UnlockVault(context.Background(), &cfg, nil)
+	if err != nil || !unlocked.Found {
+		t.Fatalf("UnlockVault = %+v, %v", unlocked, err)
+	}
+	// The key has to come back out: a snapshot may carry it so a rebuilt machine
+	// can read the secrets that snapshot also carries.
+	if unlocked.Key != key {
+		t.Fatalf("unlocked key = %q, want the one that opened the vault", unlocked.Key)
 	}
 	if cfg.Security.SigningKey != "plaintext-signing" {
 		// The sealed values equal the plaintext ones here, which is what makes

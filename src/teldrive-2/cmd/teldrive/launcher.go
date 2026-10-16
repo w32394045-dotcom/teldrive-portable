@@ -61,7 +61,8 @@ func launchBundled(ctx context.Context, out io.Writer, quiet bool) error {
 	}
 	// Before anything reads the configuration: a sealed database URL has to be
 	// in place before the launcher starts PostgreSQL from it.
-	if _, err := app.UnlockVault(ctx, &cfg, nil); err != nil {
+	unlocked, err := app.UnlockVault(ctx, &cfg, nil)
+	if err != nil {
 		return err
 	}
 	logger, err := logging.NewLogger(out, cfg.Logging.LogLevel, cfg.Logging.LogFormat)
@@ -107,7 +108,7 @@ func launchBundled(ctx context.Context, out io.Writer, quiet bool) error {
 		go launcher.OpenBrowserWhenReady(ctx, serverURL)
 	}
 
-	application, err := app.New(ctx, cfg, app.Dependencies{Logger: logger, Version: buildVersion()})
+	application, err := app.New(ctx, cfg, app.Dependencies{Logger: logger, Version: buildVersion(), VaultKey: unlocked.Key})
 	if err != nil {
 		return fmt.Errorf("initialize TelDrive: %w", err)
 	}

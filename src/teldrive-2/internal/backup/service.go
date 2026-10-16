@@ -43,6 +43,10 @@ type Service struct {
 	// because they live in the configuration rather than in the database. They
 	// are only written when the settings ask for them.
 	secrets *Secrets
+	// vaultKey opens the instance's settings vault. It is held here so a snapshot
+	// can carry it, and it is never written unless the settings ask for it and
+	// the snapshot is sealed.
+	vaultKey string
 }
 
 func NewService(queries Querier, storage telegramstore.Storage, store *Store, logger *slog.Logger) *Service {
@@ -64,6 +68,17 @@ func (s *Service) SetSecrets(secrets *Secrets) {
 		return
 	}
 	s.secrets = secrets
+}
+
+// SetVaultKey supplies the key that opens the instance's settings vault, so a
+// snapshot can carry it and a rebuilt machine can read the secrets that snapshot
+// also carries. An empty key means this machine has no vault, and the section
+// simply has nothing to write.
+func (s *Service) SetVaultKey(key string) {
+	if s == nil {
+		return
+	}
+	s.vaultKey = strings.TrimSpace(key)
 }
 
 // Entry describes one snapshot stored in Telegram.
@@ -99,14 +114,22 @@ func (s *Service) Create(ctx context.Context, userID int64) (Result, error) {
 	// path has no caller to ask: a periodic run has to use whatever the settings
 	// already say.
 	content := s.store.Content()
+	// Refuse, rather than warn, when the selection would put the key to
+	// everything else in the clear. A snapshot lands in a Telegram channel and
+	// stays there; there is no undoing that, so the one combination that cannot
+	// be made safe is not allowed to start.
+	if content.RequiresSealing() && s.store.Password() == "" {
+		return Result{}, ErrSecretsNeedSealing
+	}
 	if content.EncryptionKeys {
 		s.logger.Warn("backup.creating_with_secrets",
 			"sealed", s.store.Password() != "",
 			"detail", "this snapshot will contain the keys that decrypt the stored parts")
 	}
 	index, err := BuildIndexWith(ctx, s.queries, userID, started, BuildOptions{
-		Content: content,
-		Secrets: s.secrets,
+		Content:  content,
+		Secrets:  s.secrets,
+		VaultKey: s.vaultKey,
 	})
 	if err != nil {
 		return Result{}, err

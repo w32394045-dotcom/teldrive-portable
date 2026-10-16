@@ -96,7 +96,8 @@ func newRunCommand() *cobra.Command {
 			}
 			// The vault, when this machine has one, replaces the secrets before
 			// any of them is read.
-			if _, err := app.UnlockVault(cmd.Context(), &cfg, nil); err != nil {
+			unlocked, err := app.UnlockVault(cmd.Context(), &cfg, nil)
+			if err != nil {
 				return err
 			}
 			logger, err := logging.NewLogger(os.Stdout, cfg.Logging.LogLevel, cfg.Logging.LogFormat)
@@ -104,7 +105,7 @@ func newRunCommand() *cobra.Command {
 				return err
 			}
 			slog.SetDefault(logger)
-			application, err := app.New(cmd.Context(), cfg, app.Dependencies{Logger: logger, Version: buildVersion()})
+			application, err := app.New(cmd.Context(), cfg, app.Dependencies{Logger: logger, Version: buildVersion(), VaultKey: unlocked.Key})
 			if err != nil {
 				return fmt.Errorf("initialize TelDrive: %w", err)
 			}
@@ -132,12 +133,18 @@ func newCheckCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Check the configuration the server will actually use, which means
+			// the sealed secrets rather than the plaintext they were copied from.
+			unlocked, err := app.UnlockVault(cmd.Context(), &cfg, nil)
+			if err != nil {
+				return err
+			}
 			logger, err := logging.NewLogger(os.Stdout, cfg.Logging.LogLevel, cfg.Logging.LogFormat)
 			if err != nil {
 				return err
 			}
 			slog.SetDefault(logger)
-			application, err := app.New(cmd.Context(), cfg, app.Dependencies{Logger: logger, Version: buildVersion()})
+			application, err := app.New(cmd.Context(), cfg, app.Dependencies{Logger: logger, Version: buildVersion(), VaultKey: unlocked.Key})
 			if err != nil {
 				return fmt.Errorf("initialize TelDrive: %w", err)
 			}
