@@ -11,7 +11,7 @@ func TestSystemMountURLNormalisesWildcardBind(t *testing.T) {
 	for _, test := range []struct{ address, want string }{
 		{"127.0.0.1:8080", "http://127.0.0.1:8080/webdav"},
 		{"0.0.0.0:9000", "http://127.0.0.1:9000/webdav"},
-		{"", "http://127.0.0.1:8080/webdav"},
+		{"", "http://127.0.0.1:18787/webdav"},
 	} {
 		handler := &systemHandler{httpAddress: test.address}
 		if got := handler.mountURL(); got != test.want {

@@ -19,7 +19,11 @@ const envPrefix = "TELDRIVE_"
 var ErrInvalid = errors.New("invalid configuration")
 
 type HTTP struct {
-	Address           string        `koanf:"address" default:"127.0.0.1:8080" validate:"required" description:"HTTP listen address"`
+	// 18787 rather than 8080: that one is the first thing every other tool on a
+	// machine reaches for, so a drive that wants it loses the race often enough
+	// to look broken. The portable bundle steps to the next free port when even
+	// this one is taken.
+	Address           string        `koanf:"address" default:"127.0.0.1:18787" validate:"required" description:"HTTP listen address"`
 	ReadHeaderTimeout time.Duration `koanf:"read-header-timeout" default:"10s" validate:"gte=0" description:"Maximum time to read request headers"`
 	ReadTimeout       time.Duration `koanf:"read-timeout" default:"1h" validate:"gte=0" description:"Maximum time to read an entire request; zero disables it for streaming uploads"`
 	WriteTimeout      time.Duration `koanf:"write-timeout" default:"1h" validate:"gte=0" description:"Maximum response write duration; zero disables it for streaming"`

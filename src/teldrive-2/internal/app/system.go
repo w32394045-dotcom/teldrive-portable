@@ -318,7 +318,9 @@ func (h *systemHandler) mountDrive() string {
 func (h *systemHandler) mountURL() string {
 	address := strings.TrimSpace(h.httpAddress)
 	if address == "" {
-		address = "127.0.0.1:8080"
+		// Matches the configuration default, so a mapping made without an
+		// explicit address still points somewhere real.
+		address = "127.0.0.1:18787"
 	}
 	// A wildcard bind is not something a client can connect to.
 	if parsed, err := url.Parse("//" + address); err == nil {

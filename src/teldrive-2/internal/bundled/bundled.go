@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -192,38 +191,8 @@ func (l *Launcher) SetDatabase(rawURL string) {
 // already-running check.
 func (l *Launcher) SetHTTPAddress(address string) { l.httpAddr = address }
 
-// ServerURL is the address a user should open, normalising a wildcard bind.
-func (l *Launcher) ServerURL() string {
-	address := strings.TrimSpace(l.httpAddr)
-	if address == "" {
-		address = "127.0.0.1:8080"
-	}
-	if host, port, err := net.SplitHostPort(address); err == nil {
-		if host == "" || host == "0.0.0.0" || host == "::" {
-			address = net.JoinHostPort("127.0.0.1", port)
-		}
-	}
-	return "http://" + address
-}
-
-// AlreadyRunning reports whether something already answers on the HTTP address,
-// in which case the caller should just open the browser.
-func (l *Launcher) AlreadyRunning(ctx context.Context) bool {
-	client := &http.Client{Timeout: 2 * time.Second}
-	requestCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodGet, l.ServerURL()+"/health/live", nil)
-	if err != nil {
-		return false
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return false
-	}
-	defer response.Body.Close()
-	_, _ = io.Copy(io.Discard, response.Body)
-	return response.StatusCode == http.StatusOK
-}
+// SelectAddress, RunningAddress and ServerURL live in port.go, together with the
+// rule that decides which port the bundle actually binds.
 
 // Prepare brings the bundled database up: first-run initialisation, then start.
 func (l *Launcher) Prepare(ctx context.Context) error {

@@ -161,7 +161,10 @@ func TestServerURLNormalisesWildcardBind(t *testing.T) {
 	for _, test := range []struct{ address, want string }{
 		{"127.0.0.1:8080", "http://127.0.0.1:8080"},
 		{"0.0.0.0:9000", "http://127.0.0.1:9000"},
-		{"", "http://127.0.0.1:8080"},
+		// An unset address has to produce something a browser can open, and the
+		// default is deliberately not 8080: every other tool on the machine
+		// reaches for that one first.
+		{"", "http://127.0.0.1:18787"},
 	} {
 		launcher := New(Layout{}, nil, nil)
 		launcher.SetHTTPAddress(test.address)

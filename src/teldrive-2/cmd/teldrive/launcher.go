@@ -68,12 +68,22 @@ func launchBundled(ctx context.Context, out io.Writer, quiet bool) error {
 	launcher := bundled.New(layout, out, logger)
 	launcher.SetDatabase(cfg.Database.URL)
 	launcher.SetHTTPAddress(cfg.HTTP.Address)
-	serverURL := launcher.ServerURL()
 
-	if launcher.AlreadyRunning(ctx) {
-		fmt.Fprintf(out, "Teldrive 已经在运行，正在打开 %s\n", serverURL)
-		return bundled.OpenBrowser(serverURL)
+	// A second double-click must find the running server rather than start a
+	// rival one, and after the port has moved once the configuration no longer
+	// names it -- which is why the launcher, not the config file, answers this.
+	if running := launcher.RunningAddress(ctx); running != "" {
+		fmt.Fprintf(out, "Teldrive 已经在运行，正在打开 %s\n", running)
+		return bundled.OpenBrowser(running)
 	}
+	// The port is the launcher's to choose: the bundle cannot assume the one in
+	// the configuration is free on somebody else's machine.
+	address, err := launcher.SelectAddress(ctx)
+	if err != nil {
+		return err
+	}
+	cfg.HTTP.Address = address
+	serverURL := launcher.ServerURL()
 
 	if err := launcher.Prepare(ctx); err != nil {
 		return err
