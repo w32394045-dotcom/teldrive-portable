@@ -1,30 +1,33 @@
 import createFetchClient from "openapi-fetch";
 import createQueryClient from "openapi-react-query";
 import { readApiKey } from "@/auth/api-key";
+import { PERSIST_HEADER, persistHeaderValue } from "@/auth/keep-signed-in";
 import { normalizeApiError } from "./errors";
 import type { paths } from "./schema";
 
 const API_BASE_URL = "/api";
 
 /**
- * Attach the API key when one is stored.
+ * Attach the API key when one is stored, and state the "keep me signed in"
+ * choice.
  *
- * Every request goes through `fetchWithApiErrors`, so injecting the header here
- * covers the generated client and hand-written `apiFetch` calls alike. The
- * header is set only when absent so an explicit caller-supplied value wins.
+ * Every request goes through `fetchWithApiErrors`, so setting both here covers
+ * the generated client and hand-written `apiFetch` calls alike -- including the
+ * login that issues the cookies, which is the one that actually needs the
+ * preference. Explicit caller-supplied values win.
  */
-function withApiKey(init?: RequestInit): RequestInit {
-  const key = readApiKey();
-  if (!key) return init ?? {};
+function withCredentials(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers);
-  if (!headers.has("X-Api-Key")) headers.set("X-Api-Key", key);
+  const key = readApiKey();
+  if (key && !headers.has("X-Api-Key")) headers.set("X-Api-Key", key);
+  if (!headers.has(PERSIST_HEADER)) headers.set(PERSIST_HEADER, persistHeaderValue());
   return { ...init, headers };
 }
 
 async function fetchWithApiErrors(input: RequestInfo | URL, init?: RequestInit) {
   let response: Response;
   try {
-    response = await fetch(input, withApiKey(init));
+    response = await fetch(input, withCredentials(init));
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw normalizeApiError(error);

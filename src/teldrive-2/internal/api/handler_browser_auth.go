@@ -25,6 +25,31 @@ func cookieSecure(ctx context.Context) bool {
 	return secure
 }
 
+type sessionPersistContextKey struct{}
+
+// WithSessionPersistence carries the "keep me signed in" choice from the request
+// to the code that issues the cookies.
+//
+// It travels in the context rather than as a handler argument because the login
+// handlers are generated from the TypeSpec contract, and adding a field there
+// would mean regenerating the whole API surface for one checkbox. A middleware
+// reads the request and injects it, exactly as the secure-cookie flag does.
+func WithSessionPersistence(ctx context.Context, persist bool) context.Context {
+	return context.WithValue(ctx, sessionPersistContextKey{}, persist)
+}
+
+// sessionPersists reports whether the session cookies should outlive the
+// browser. The zero value is true: a client that says nothing gets the
+// persistent session, which is what a personal drive on its own machine wants,
+// and what every other client already had.
+func sessionPersists(ctx context.Context) bool {
+	persist, ok := ctx.Value(sessionPersistContextKey{}).(bool)
+	if !ok {
+		return true
+	}
+	return persist
+}
+
 func (h *Handler) CookieTelegramLoginVerifyCode(ctx context.Context, req *gen.TelegramCodeVerifyRequest, _ gen.CookieTelegramLoginVerifyCodeParams) (gen.CookieTelegramLoginVerifyCodeRes, error) {
 	if h.Auth == nil || req == nil {
 		return nil, mapServiceError(ErrOperationUnavailable)
@@ -112,16 +137,24 @@ func (h *Handler) cookieSessionResponse(ctx context.Context, tokens *authn.Token
 
 func (h *Handler) cookie(ctx context.Context, name, value string, ttl time.Duration) *http.Cookie {
 	maxAge := int(ttl / time.Second)
-	return &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     name,
 		Value:    value,
 		Path:     "/",
-		MaxAge:   maxAge,
-		Expires:  time.Now().UTC().Add(ttl),
 		HttpOnly: true,
 		Secure:   cookieSecure(ctx),
 		SameSite: http.SameSiteLaxMode,
 	}
+	if sessionPersists(ctx) {
+		cookie.MaxAge = maxAge
+		cookie.Expires = time.Now().UTC().Add(ttl)
+	}
+	// Without MaxAge and Expires the browser keeps the cookie for the browsing
+	// session and drops it when it closes, which is the whole meaning of "do not
+	// keep me signed in". The server-side session still lives for its full
+	// lifetime: this decides how long the browser holds the key, not how long
+	// the key is valid.
+	return cookie
 }
 
 func (h *Handler) expiredCookies(ctx context.Context) []string {

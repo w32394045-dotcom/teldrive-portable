@@ -119,17 +119,26 @@ func accessCookieNeedsRefresh(raw string, now time.Time) bool {
 	return !time.Unix(claims.ExpiresAt, 0).After(now.Add(accessRefreshSkew))
 }
 
+// sessionCookie builds the renewed access cookie.
+//
+// It honours the same "keep me signed in" choice the login did. Without that, a
+// session-only login would quietly become a persistent one fifteen minutes
+// later, when the access token is first renewed -- which is exactly the kind of
+// silent reversal a security preference must not have.
 func sessionCookie(r *http.Request, name, value string, ttl time.Duration) *http.Cookie {
-	return &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     name,
 		Value:    value,
 		Path:     "/",
-		MaxAge:   int(ttl / time.Second),
-		Expires:  time.Now().UTC().Add(ttl),
 		HttpOnly: true,
 		Secure:   requestIsSecure(r),
 		SameSite: http.SameSiteLaxMode,
 	}
+	if sessionPersistenceRequested(r) {
+		cookie.MaxAge = int(ttl / time.Second)
+		cookie.Expires = time.Now().UTC().Add(ttl)
+	}
+	return cookie
 }
 
 func clearSessionCookies(w http.ResponseWriter, r *http.Request) {
@@ -191,8 +200,27 @@ func (s *requestSecurity) middleware(next http.Handler) http.Handler {
 		secure := r.TLS != nil || (s.isTrustedProxy(r) && forwardedProto(r) == "https")
 		ctx := context.WithValue(r.Context(), requestSecureContextKey{}, secure)
 		ctx = api.WithCookieSecure(ctx, secure)
+		ctx = api.WithSessionPersistence(ctx, sessionPersistenceRequested(r))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// sessionPersistenceHeader is how the login page says whether the session should
+// outlive the browser. A header rather than a body field because the login
+// handlers are generated from the TypeSpec contract, and one checkbox is not
+// worth regenerating the API surface for.
+const sessionPersistenceHeader = "X-Teldrive-Persist"
+
+// sessionPersistenceRequested reads the "keep me signed in" choice.
+//
+// Only an explicit "session" turns persistence off. Anything else -- an absent
+// header, a different client, a typo -- keeps the persistent default, because
+// the failure mode of guessing wrong here is a user who has to sign in again
+// with their phone, and the failure mode of the other guess is a cookie that
+// outlives a browser they closed on purpose.
+func sessionPersistenceRequested(r *http.Request) bool {
+	value, _, _ := strings.Cut(r.Header.Get(sessionPersistenceHeader), ",")
+	return !strings.EqualFold(strings.TrimSpace(value), "session")
 }
 
 type requestSecureContextKey struct{}

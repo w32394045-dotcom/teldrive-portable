@@ -184,6 +184,73 @@ func TestSessionRenewalMiddleware(t *testing.T) {
 	}
 }
 
+// TestSessionPersistenceIsOptOutOnly pins the direction of the default. Guessing
+// "session only" wrongly costs the user a phone sign-in; guessing "persistent"
+// wrongly leaves a cookie the browser keeps until it is closed on purpose.
+func TestSessionPersistenceIsOptOutOnly(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		header string
+		want   bool
+	}{
+		"absent":            {"", true},
+		"session":           {"session", false},
+		"shouted":           {"SESSION", false},
+		"padded":            {"  session  ", false},
+		"first of several":  {"session, session", false},
+		"explicit persist":  {"persist", true},
+		"nonsense":          {"sessions", true},
+		"different client":  {"keep-alive", true},
+		"almost the word":   {"sessio", true},
+		"empty-ish persist": {" ", true},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "http://drive.example.test/v1/auth/cookie/login", nil)
+			if testCase.header != "" {
+				request.Header.Set(sessionPersistenceHeader, testCase.header)
+			}
+			if got := sessionPersistenceRequested(request); got != testCase.want {
+				t.Fatalf("sessionPersistenceRequested(%q) = %v, want %v", testCase.header, got, testCase.want)
+			}
+		})
+	}
+}
+
+// TestRenewalHonoursTheSessionChoice is the silent-reversal guard: a session-only
+// login must not quietly become persistent fifteen minutes later, when the access
+// token is first renewed.
+func TestRenewalHonoursTheSessionChoice(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	stub := &renewalStub{renewal: authn.AccessRenewal{AccessToken: "a2", ExpiresIn: 900}}
+	handler := sessionRenewalMiddleware(stub, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	renew := func(t *testing.T, header string) *http.Cookie {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "http://drive.example.test/v1/files", nil)
+		if header != "" {
+			request.Header.Set(sessionPersistenceHeader, header)
+		}
+		request.AddCookie(&http.Cookie{Name: accessCookieName, Value: testAccessJWT(now.Add(-time.Minute))})
+		request.AddCookie(&http.Cookie{Name: refreshCookieName, Value: "r1"})
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		cookies := response.Result().Cookies()
+		if len(cookies) != 1 {
+			t.Fatalf("expected exactly the renewed access cookie, got %#v", cookies)
+		}
+		return cookies[0]
+	}
+
+	if cookie := renew(t, "session"); cookie.MaxAge != 0 || !cookie.Expires.IsZero() {
+		t.Fatalf("a session-only login was renewed into a persistent cookie: %#v", cookie)
+	}
+	if cookie := renew(t, ""); cookie.MaxAge <= 0 || cookie.Expires.IsZero() {
+		t.Fatalf("a persistent login lost its lifetime on renewal: %#v", cookie)
+	}
+}
+
 func testAccessJWT(expiresAt time.Time) string {
 	payload, _ := json.Marshal(map[string]int64{"exp": expiresAt.Unix()})
 	return "h." + base64.RawURLEncoding.EncodeToString(payload) + ".s"

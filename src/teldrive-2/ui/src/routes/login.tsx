@@ -23,14 +23,47 @@ import { userMessage } from "@/api/errors";
 import { newIdempotencyKey } from "@/features/shared/idempotency";
 import { getQueryClient } from "@/lib/queryClient";
 import { currentUserQueryOptions } from "@/auth/queries";
+import { clearApiKey, readApiKey, telegramSignInAllowed, writeApiKey } from "@/auth/api-key";
 import {
-  clearApiKey,
-  readApiKey,
-  telegramSignInAllowed,
-  writeApiKey,
-} from "@/auth/api-key";
+  keepSignedIn as keepSignedInPreference,
+  setKeepSignedIn as setKeepSignedInPreference,
+} from "@/auth/keep-signed-in";
 import { t } from "@/i18n";
 import { LocaleSelect } from "@/i18n/LocaleSelect";
+
+/**
+ * The one place the "keep me signed in" choice is offered.
+ *
+ * It sits in both forms because both need it and only one is on screen at a
+ * time: the API key decides which browser store holds the key, and the session
+ * cookies are issued by the server, which reads the choice from a request header
+ * that the shared client already sends on every call.
+ */
+function KeepSignedInSwitch({
+  value,
+  onChange,
+}: {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="grid gap-1">
+      <Switch isSelected={value} onChange={onChange}>
+        <Switch.Content>
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+          <Label>{t("Keep me signed in")}</Label>
+        </Switch.Content>
+      </Switch>
+      <p className="text-xs text-muted">
+        {value
+          ? t("This browser stays signed in until you sign out.")
+          : t("You will be signed out when this browser closes.")}
+      </p>
+    </div>
+  );
+}
 
 type Step = "phone" | "code" | "password";
 type Method = "key" | "phone" | "qr";
@@ -83,8 +116,15 @@ function LoginPage() {
   const [qrUrl, setQrUrl] = useState("");
   const [qrExpiry, setQrExpiry] = useState("");
   const [apiKey, setApiKey] = useState(() => readApiKey() ?? "");
-  const [rememberDevice, setRememberDevice] = useState(false);
+  // The same preference governs both paths, so it is read once here rather than
+  // defaulted per form.
+  const [keepSignedIn, setKeepSignedInState] = useState(() => keepSignedInPreference());
   const [keyPending, setKeyPending] = useState(false);
+
+  const chooseKeepSignedIn = (value: boolean) => {
+    setKeepSignedInState(value);
+    setKeepSignedInPreference(value);
+  };
 
   const startPhone = $api.useMutation("post", "/v1/auth/telegram/start");
   const verifyCode = $api.useMutation("post", "/v1/auth/cookie/telegram/verify-code");
@@ -111,7 +151,7 @@ function LoginPage() {
     const value = apiKey.trim();
     if (!value) return;
     setKeyPending(true);
-    writeApiKey(value, rememberDevice);
+    writeApiKey(value, keepSignedIn);
     try {
       await finish();
     } catch (error) {
@@ -217,19 +257,7 @@ function LoginPage() {
           {t("Create one under Settings, API keys. The secret is shown only once.")}
         </Description>
       </TextField>
-      <Switch isSelected={rememberDevice} onChange={setRememberDevice}>
-        <Switch.Content>
-          <Switch.Control>
-            <Switch.Thumb />
-          </Switch.Control>
-          <Label>{t("Remember this device")}</Label>
-        </Switch.Content>
-      </Switch>
-      <p className="text-xs text-muted">
-        {rememberDevice
-          ? t("The key is kept in this browser until you sign out.")
-          : t("The key is kept for this tab only and is dropped when it closes.")}
-      </p>
+      <KeepSignedInSwitch value={keepSignedIn} onChange={chooseKeepSignedIn} />
       <Button className="w-full" onPress={submitKey} isDisabled={keyPending || !apiKey.trim()}>
         {keyPending ? <Spinner size="sm" /> : <KeyIcon className="size-4" />}
         {t("Sign in")}
@@ -254,7 +282,9 @@ function LoginPage() {
             {t("Your Telegram-backed cloud drive.")}
           </h1>
           <p className="mt-4 max-w-lg text-sm leading-6 text-muted">
-            {t("Manage files, uploads, background jobs, channels, bots, sessions, and API access from one focused interface.")}
+            {t(
+              "Manage files, uploads, background jobs, channels, bots, sessions, and API access from one focused interface.",
+            )}
           </p>
         </div>
       </section>
@@ -267,7 +297,9 @@ function LoginPage() {
             <Card.Description>
               {telegramAvailable
                 ? t("Use your Telegram account, or an API key issued for this machine.")
-                : t("This drive is published through a gateway. Sign in with an API key issued by its owner.")}
+                : t(
+                    "This drive is published through a gateway. Sign in with an API key issued by its owner.",
+                  )}
             </Card.Description>
           </Card.Header>
           <Card.Content className="space-y-5 px-6 pb-6">
@@ -304,9 +336,18 @@ function LoginPage() {
                         onChange={(event) => setPhone(normalizePhone(event.target.value))}
                       />
                       {phoneInvalid ? (
-                        <FieldError>{t("Start with + and the country code, e.g. {{PHONE_EXAMPLE}}", { PHONE_EXAMPLE })}</FieldError>
+                        <FieldError>
+                          {t("Start with + and the country code, e.g. {{PHONE_EXAMPLE}}", {
+                            PHONE_EXAMPLE,
+                          })}
+                        </FieldError>
                       ) : (
-                        <Description>{t("Include the country code, e.g. {{PHONE_EXAMPLE}}. Spaces and dashes are fine.", { PHONE_EXAMPLE })}</Description>
+                        <Description>
+                          {t(
+                            "Include the country code, e.g. {{PHONE_EXAMPLE}}. Spaces and dashes are fine.",
+                            { PHONE_EXAMPLE },
+                          )}
+                        </Description>
                       )}
                     </TextField>
                   )}
@@ -332,6 +373,7 @@ function LoginPage() {
                       />
                     </TextField>
                   )}
+                  <KeepSignedInSwitch value={keepSignedIn} onChange={chooseKeepSignedIn} />
                   <Button
                     className="w-full"
                     onPress={submitPhone}
@@ -365,7 +407,11 @@ function LoginPage() {
                 <Tabs.Panel id="qr" className="space-y-4 pt-4">
                   <div className="grid min-h-72 place-items-center rounded-xl border border-border bg-white p-5 text-black">
                     {qrUrl ? (
-                      <QRCodeSVG value={qrUrl} size={220} aria-label={t("Telegram sign-in QR code")} />
+                      <QRCodeSVG
+                        value={qrUrl}
+                        size={220}
+                        aria-label={t("Telegram sign-in QR code")}
+                      />
                     ) : (
                       <Spinner size="lg" />
                     )}
