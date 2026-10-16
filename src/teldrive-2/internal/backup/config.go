@@ -78,6 +78,13 @@ type configFile struct {
 	// once, deliberately, and not in the middle of an emergency. It never causes
 	// a restore on its own: nothing but a confirmed request reads it.
 	RestoreMode string `json:"restoreMode,omitempty"`
+	// Password seals every snapshot written from here on. Empty means snapshots
+	// are stored as plain JSON, which is what makes an unattended scheduled
+	// backup possible at all: there is nobody to ask. It is kept here in the
+	// clear, beside config.toml, because that file already holds the data key
+	// and the signing key; protecting the settings files as a whole is the
+	// vault's job, and a second copy of the same weakness would not solve it.
+	Password string `json:"password,omitempty"`
 	// LastBackupAt and LastMessageID describe the newest snapshot, for the
 	// settings page and for finding the document after a restart.
 	LastBackupAt  string `json:"lastBackupAt,omitempty"`
@@ -87,11 +94,15 @@ type configFile struct {
 
 // Settings is the caller-facing view of the stored configuration.
 type Settings struct {
-	Enabled       bool      `json:"enabled"`
-	Interval      string    `json:"interval"`
-	OwnerUserID   int64     `json:"ownerUserId,omitempty"`
-	ChannelID     int64     `json:"channelId"`
-	RestoreMode   string    `json:"restoreMode"`
+	Enabled     bool   `json:"enabled"`
+	Interval    string `json:"interval"`
+	OwnerUserID int64  `json:"ownerUserId,omitempty"`
+	ChannelID   int64  `json:"channelId"`
+	RestoreMode string `json:"restoreMode"`
+	// PasswordSet reports whether snapshots are being sealed. The passphrase
+	// itself is never handed out, not even to an owner: it is not needed to
+	// render the page, and a secret that travels is a secret that leaks.
+	PasswordSet   bool      `json:"passwordSet"`
 	LastBackupAt  time.Time `json:"lastBackupAt,omitempty"`
 	LastMessageID int64     `json:"lastMessageId,omitempty"`
 	LastSize      int64     `json:"lastSize,omitempty"`
@@ -165,10 +176,40 @@ func (s *Store) Settings() Settings {
 		OwnerUserID:   s.value.OwnerUserID,
 		ChannelID:     s.value.ChannelID,
 		RestoreMode:   string(mode),
+		PasswordSet:   s.value.Password != "",
 		LastBackupAt:  parseTime(s.value.LastBackupAt),
 		LastMessageID: s.value.LastMessageID,
 		LastSize:      s.value.LastSize,
 	}
+}
+
+// Password returns the passphrase snapshots are sealed with, or an empty string
+// when they are stored as plain JSON.
+func (s *Store) Password() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.value.Password
+}
+
+// SetPassword records the sealing passphrase. An empty value turns sealing off,
+// which is a deliberate choice rather than an error: an unattended schedule has
+// nobody to ask for a passphrase.
+//
+// A non-empty value is validated here so the settings endpoint can reject a
+// passphrase that Seal would refuse later, at a point where the user can still
+// see why.
+func (s *Store) SetPassword(password string) error {
+	if password != "" {
+		if err := ValidatePassword(password); err != nil {
+			return err
+		}
+	}
+	return s.update(func(value *configFile) {
+		value.Password = password
+	})
 }
 
 // RestoreMode returns the configured apply strategy, defaulting to overwrite.

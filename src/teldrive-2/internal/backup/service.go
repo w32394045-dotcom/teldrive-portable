@@ -85,13 +85,24 @@ func (s *Service) Create(ctx context.Context, userID int64) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("backup: encode index: %w", err)
 	}
+	// Sealing happens before the channel is touched, so a passphrase problem
+	// cannot leave a half-finished backup behind. An empty passphrase is not a
+	// problem: it means the snapshot is stored as plain JSON.
+	sealed := false
+	if password := s.store.Password(); password != "" {
+		payload, err = Seal(payload, password, started)
+		if err != nil {
+			return Result{}, err
+		}
+		sealed = true
+	}
 
 	channelID, channelName, err := s.ensureChannel(ctx, userID)
 	if err != nil {
 		return Result{}, err
 	}
 
-	name := documentName(started)
+	name := documentName(started, sealed)
 	stored, err := s.storage.Upload(ctx, telegramstore.UploadRequest{
 		UserID:    userID,
 		ChannelID: channelID,
@@ -110,7 +121,8 @@ func (s *Service) Create(ctx context.Context, userID int64) (Result, error) {
 	}
 	s.logger.Info("backup.created",
 		"user", userID, "channel", channelID, "message", stored.MessageID,
-		"bytes", len(payload), "files", index.Counts.Files, "parts", index.Counts.Parts)
+		"bytes", len(payload), "sealed", sealed,
+		"files", index.Counts.Files, "parts", index.Counts.Parts)
 
 	return Result{
 		Entry: Entry{
@@ -201,12 +213,24 @@ func (s *Service) Download(ctx context.Context, userID, messageID, offset, lengt
 // hostile document in the channel cannot exhaust the server.
 const maxIndexBytes = 256 << 20
 
-// LoadSnapshot downloads one stored snapshot and parses it.
+// LoadSnapshot downloads one stored snapshot and parses it, unsealing it with
+// the passphrase from the settings.
+func (s *Service) LoadSnapshot(ctx context.Context, userID, messageID int64) (*Index, error) {
+	if s == nil || s.store == nil {
+		return nil, ErrNotConfigured
+	}
+	return s.LoadSnapshotWithPassword(ctx, userID, messageID, s.store.Password())
+}
+
+// LoadSnapshotWithPassword is LoadSnapshot with the passphrase supplied by the
+// caller, for a snapshot that was sealed with a different one than the settings
+// currently hold. An empty passphrase is fine for an unsealed snapshot and is
+// refused, with ErrPasswordRequired, for a sealed one.
 //
 // Reading is the only part of a restore that touches Telegram, and it happens
-// before anything is written, so a snapshot that cannot be fetched or does not
-// parse fails without having altered the catalog.
-func (s *Service) LoadSnapshot(ctx context.Context, userID, messageID int64) (*Index, error) {
+// before anything is written, so a snapshot that cannot be fetched, cannot be
+// unsealed or does not parse fails without having altered the catalog.
+func (s *Service) LoadSnapshotWithPassword(ctx context.Context, userID, messageID int64, password string) (*Index, error) {
 	if s == nil || s.storage == nil || s.store == nil {
 		return nil, ErrNotConfigured
 	}
@@ -229,11 +253,32 @@ func (s *Service) LoadSnapshot(ctx context.Context, userID, messageID int64) (*I
 	if len(payload) > maxIndexBytes {
 		return nil, fmt.Errorf("backup: snapshot is larger than %d MiB", maxIndexBytes>>20)
 	}
+	// Note whether the stored bytes were encrypted before they are opened, so a
+	// summary can report it; the plaintext no longer says.
+	sealed := IsSealed(payload)
+	payload, err = Unseal(payload, password)
+	if err != nil {
+		return nil, err
+	}
 	var index Index
 	if err := json.Unmarshal(payload, &index); err != nil {
 		return nil, fmt.Errorf("backup: decode snapshot: %w", err)
 	}
+	index.Sealed = sealed
 	return &index, nil
+}
+
+// Inspect describes a stored snapshot without applying anything.
+//
+// It exists so the settings page can show what is inside before someone commits
+// to a restore -- and, more importantly, so it can ask for the passphrase of a
+// sealed snapshot instead of failing at the last moment. Nothing here writes.
+func (s *Service) Inspect(ctx context.Context, userID, messageID int64, password string) (IndexSummary, error) {
+	index, err := s.LoadSnapshotWithPassword(ctx, userID, messageID, password)
+	if err != nil {
+		return IndexSummary{}, err
+	}
+	return index.Summary(), nil
 }
 
 // ensureChannel returns the snapshot channel, creating it on first use.
@@ -257,6 +302,15 @@ func (s *Service) ensureChannel(ctx context.Context, userID int64) (int64, strin
 }
 
 // documentName sorts lexicographically by time so the channel reads in order.
-func documentName(at time.Time) string {
-	return fmt.Sprintf("%s-%s.json", documentPrefix, at.UTC().Format("20060102-150405"))
+//
+// A sealed snapshot says so in its own filename. That is the only place the
+// channel listing can tell the difference -- the scanner never reads message
+// bodies -- and it is what a person recovering a drive years later will see
+// before they have any tooling at hand.
+func documentName(at time.Time, sealed bool) string {
+	suffix := ".json"
+	if sealed {
+		suffix = ".sealed.json"
+	}
+	return fmt.Sprintf("%s-%s%s", documentPrefix, at.UTC().Format("20060102-150405"), suffix)
 }

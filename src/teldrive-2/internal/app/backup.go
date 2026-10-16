@@ -32,6 +32,10 @@ const (
 	// endpoint in the application that deletes a user's files in bulk, so it
 	// requires an explicit confirmation and is never reachable from a timer.
 	backupRestorePath = "/api/backup/restore"
+	// backupInspectPath describes a snapshot without applying it. It is what
+	// lets the page ask for a passphrase instead of failing at the last moment,
+	// and what lets someone look before they leap.
+	backupInspectPath = "/api/backup/inspect"
 )
 
 // restoreConfirm is the exact token the caller must echo to apply a restore.
@@ -107,6 +111,8 @@ func (h *backupHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveSnapshot(w, r, userID)
 	case backupRestorePath:
 		h.serveRestore(w, r, userID)
+	case backupInspectPath:
+		h.serveInspect(w, r, userID)
 	default:
 		writeJSONMessage(w, http.StatusNotFound, "not_found", "Unknown backup endpoint.")
 	}
@@ -127,10 +133,18 @@ type settingsResponse struct {
 	// UI may offer, so the two can never disagree about what is valid.
 	RestoreMode  string   `json:"restoreMode"`
 	RestoreModes []string `json:"restoreModes"`
+	// PasswordSet says whether snapshots are sealed. The passphrase itself is
+	// deliberately absent: the page only needs to know whether one is set, and a
+	// secret that travels is a secret that leaks.
+	PasswordSet bool `json:"passwordSet"`
 	// The bounds travel with the payload rather than being reimplemented in the
 	// UI, so the two can never drift apart.
 	DefaultInterval string `json:"defaultInterval"`
 	MinimumInterval string `json:"minimumInterval"`
+	// MinimumPasswordLength travels for the same reason: the page validates a
+	// typed passphrase before sending it, and hard-coding the rule there would
+	// let the two drift.
+	MinimumPasswordLength int `json:"minimumPasswordLength"`
 }
 
 func (h *backupHandler) serveSettings(w http.ResponseWriter, r *http.Request, userID int64) {
@@ -142,15 +156,19 @@ func (h *backupHandler) serveSettings(w http.ResponseWriter, r *http.Request, us
 			Enabled     *bool   `json:"enabled"`
 			Interval    *string `json:"interval"`
 			RestoreMode *string `json:"restoreMode"`
+			// Password is the sealing passphrase. An empty string clears it and
+			// stores snapshots as plain JSON, which is a legitimate choice for an
+			// unattended schedule rather than a mistake to be rejected.
+			Password *string `json:"password"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, configBodyLimit)).Decode(&body); err != nil {
 			writeJSONMessage(w, http.StatusBadRequest, "invalid_request",
-				`Expected a JSON body of the form {"enabled": true|false, "interval": "168h", "restoreMode": "overwrite"}.`)
+				`Expected a JSON body of the form {"enabled": true|false, "interval": "168h", "restoreMode": "overwrite", "password": "..."}.`)
 			return
 		}
-		if body.Enabled == nil && body.Interval == nil && body.RestoreMode == nil {
+		if body.Enabled == nil && body.Interval == nil && body.RestoreMode == nil && body.Password == nil {
 			writeJSONMessage(w, http.StatusBadRequest, "invalid_request",
-				`Expected at least one of "enabled", "interval" or "restoreMode".`)
+				`Expected at least one of "enabled", "interval", "restoreMode" or "password".`)
 			return
 		}
 		// Omitted fields keep their current value, so saving one switch cannot
@@ -174,6 +192,12 @@ func (h *backupHandler) serveSettings(w http.ResponseWriter, r *http.Request, us
 				h.logger.Error("backup.settings.restore_mode_failed", "error", err)
 				writeJSONMessage(w, http.StatusInternalServerError, "write_failed",
 					"The restore mode could not be saved: "+err.Error())
+				return
+			}
+		}
+		if body.Password != nil {
+			if err := h.store.SetPassword(*body.Password); err != nil {
+				writeJSONMessage(w, http.StatusBadRequest, "invalid_password", err.Error())
 				return
 			}
 		}
@@ -308,6 +332,54 @@ func (h *backupHandler) serveSnapshot(w http.ResponseWriter, r *http.Request, us
 	}
 }
 
+// serveInspect reports what a stored snapshot contains.
+//
+// It is deliberately the inverse of the restore endpoint: read-only, no
+// confirmation token, no mode, and nothing in the catalog is touched. Someone
+// staring at a disaster needs to be able to look inside a snapshot before they
+// decide, and they need to find out that it is encrypted while they still have
+// the passphrase at hand.
+func (h *backupHandler) serveInspect(w http.ResponseWriter, r *http.Request, userID int64) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "POST")
+		writeJSONMessage(w, http.StatusMethodNotAllowed, "method_not_allowed", "Use POST.")
+		return
+	}
+	var body struct {
+		MessageID int64  `json:"messageId"`
+		Password  string `json:"password"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, configBodyLimit)).Decode(&body); err != nil || body.MessageID <= 0 {
+		writeJSONMessage(w, http.StatusBadRequest, "invalid_request",
+			`Expected a JSON body of the form {"messageId": 1, "password": ""}.`)
+		return
+	}
+	passphrase := body.Password
+	if passphrase == "" {
+		passphrase = h.store.Password()
+	}
+	target := h.ownerOrDefault(userID)
+
+	summary, err := h.service.Inspect(r.Context(), target, body.MessageID, passphrase)
+	if err != nil {
+		switch {
+		case errors.Is(err, backup.ErrSnapshotNotFound):
+			writeJSONMessage(w, http.StatusNotFound, "not_found", "No snapshot has been recorded yet.")
+		case errors.Is(err, backup.ErrPasswordRequired):
+			writeJSONMessage(w, http.StatusPreconditionRequired, "password_required", err.Error())
+		case errors.Is(err, backup.ErrPasswordRejected):
+			writeJSONMessage(w, http.StatusConflict, "password_rejected", err.Error())
+		case errors.Is(err, backup.ErrEnvelopeInvalid):
+			writeJSONMessage(w, http.StatusBadRequest, "invalid_snapshot", err.Error())
+		default:
+			h.logger.Error("backup.inspect.failed", "message", body.MessageID, "error", err)
+			writeJSONMessage(w, http.StatusBadGateway, "load_failed", err.Error())
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 // serveRestore applies a snapshot over the live catalog.
 //
 // This is the one endpoint that can destroy a drive, so it demands three things
@@ -325,6 +397,10 @@ func (h *backupHandler) serveRestore(w http.ResponseWriter, r *http.Request, use
 		MessageID int64  `json:"messageId"`
 		Mode      string `json:"mode"`
 		Confirm   string `json:"confirm"`
+		// Password unseals a snapshot that was written with a different
+		// passphrase than the settings now hold. Empty falls back to the stored
+		// one, which is the normal case.
+		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, configBodyLimit)).Decode(&body); err != nil {
 		writeJSONMessage(w, http.StatusBadRequest, "invalid_request",
@@ -354,16 +430,30 @@ func (h *backupHandler) serveRestore(w http.ResponseWriter, r *http.Request, use
 	}
 	target := h.ownerOrDefault(userID)
 
-	// Read and validate first: a snapshot that cannot be fetched or parsed must
-	// fail before anything has been deleted.
-	index, err := h.service.LoadSnapshot(r.Context(), target, body.MessageID)
+	// Read and validate first: a snapshot that cannot be fetched, cannot be
+	// unsealed or does not parse must fail before anything has been deleted.
+	passphrase := body.Password
+	if passphrase == "" {
+		passphrase = h.store.Password()
+	}
+	index, err := h.service.LoadSnapshotWithPassword(r.Context(), target, body.MessageID, passphrase)
 	if err != nil {
-		if errors.Is(err, backup.ErrSnapshotNotFound) {
+		switch {
+		case errors.Is(err, backup.ErrSnapshotNotFound):
 			writeJSONMessage(w, http.StatusNotFound, "not_found", "No snapshot has been recorded yet.")
-			return
+		case errors.Is(err, backup.ErrPasswordRequired):
+			writeJSONMessage(w, http.StatusPreconditionRequired, "password_required", err.Error())
+		case errors.Is(err, backup.ErrPasswordRejected):
+			writeJSONMessage(w, http.StatusConflict, "password_rejected", err.Error())
+		case errors.Is(err, backup.ErrEnvelopeInvalid),
+			errors.Is(err, backup.ErrPasswordTooShort),
+			errors.Is(err, backup.ErrPasswordTooLong),
+			errors.Is(err, backup.ErrPasswordBlank):
+			writeJSONMessage(w, http.StatusBadRequest, "invalid_snapshot", err.Error())
+		default:
+			h.logger.Error("backup.restore.load_failed", "message", body.MessageID, "error", err)
+			writeJSONMessage(w, http.StatusBadGateway, "load_failed", err.Error())
 		}
-		h.logger.Error("backup.restore.load_failed", "message", body.MessageID, "error", err)
-		writeJSONMessage(w, http.StatusBadGateway, "load_failed", err.Error())
 		return
 	}
 	if err := index.Validate(target); err != nil {
@@ -410,8 +500,11 @@ func (h *backupHandler) snapshot() settingsResponse {
 		LastSize:        settings.LastSize,
 		RestoreMode:     settings.RestoreMode,
 		RestoreModes:    restoreModeNames(),
+		PasswordSet:     settings.PasswordSet,
 		DefaultInterval: backup.DefaultInterval.String(),
 		MinimumInterval: backup.MinInterval.String(),
+
+		MinimumPasswordLength: backup.MinimumPasswordLength,
 	}
 	if !settings.LastBackupAt.IsZero() {
 		at := settings.LastBackupAt

@@ -296,6 +296,7 @@ func TestSettingsJSONKeysMatchTheUIContract(t *testing.T) {
 	}
 	for _, key := range []string{
 		"enabled", "interval", "restoreMode", "restoreModes", "defaultInterval", "minimumInterval",
+		"passwordSet", "minimumPasswordLength",
 	} {
 		if _, ok := payload[key]; !ok {
 			t.Fatalf("settings payload is missing %q: %v", key, payload)
@@ -343,10 +344,127 @@ func TestSettingsJSONCarriesTheLastBackup(t *testing.T) {
 	}
 }
 
+// TestSettingsAcceptsAPassphrase covers the sealing switch. The passphrase goes
+// in and never comes back out: the page only needs to know whether one is set.
+func TestSettingsAcceptsAPassphrase(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, nil)
+	const passphrase = "correct horse battery"
+
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath,
+		strings.NewReader(`{"password": "`+passphrase+`"}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", recorder.Code, recorder.Body)
+	}
+	if store.Password() != passphrase {
+		t.Fatal("the passphrase was not stored")
+	}
+	if strings.Contains(recorder.Body.String(), passphrase) {
+		t.Fatalf("the response echoed the passphrase: %s", recorder.Body)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if payload["passwordSet"] != true {
+		t.Fatalf("passwordSet = %v, want true", payload["passwordSet"])
+	}
+	if _, ok := payload["minimumPasswordLength"]; !ok {
+		t.Fatalf("the page cannot validate a passphrase without minimumPasswordLength: %v", payload)
+	}
+}
+
+func TestSettingsRejectsAPassphraseItCannotUse(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, nil)
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath, strings.NewReader(`{"password": "short"}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body %s)", recorder.Code, recorder.Body)
+	}
+	if code := errorCode(t, recorder); code != "invalid_password" {
+		t.Fatalf("code = %q, want invalid_password", code)
+	}
+	if store.Settings().PasswordSet {
+		t.Fatal("a rejected passphrase changed the stored setting")
+	}
+}
+
+// TestSettingsClearsThePassphrase pins the other direction: an empty string is
+// how sealing is turned off, and it must not be mistaken for "leave it alone".
+func TestSettingsClearsThePassphrase(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, func(store *backup.Store) {
+		if err := store.SetPassword("correct horse battery"); err != nil {
+			t.Fatalf("seed passphrase: %v", err)
+		}
+	})
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath, strings.NewReader(`{"password": ""}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", recorder.Code, recorder.Body)
+	}
+	if store.Settings().PasswordSet {
+		t.Fatal("an empty passphrase did not turn sealing off")
+	}
+}
+
+// TestSettingsWithoutAPassphraseKeepsTheStoredOne guards the obvious mistake of
+// a partial update wiping a secret nobody asked it to touch.
+func TestSettingsWithoutAPassphraseKeepsTheStoredOne(t *testing.T) {
+	handler, store, _ := newTestBackupHandler(t, func(store *backup.Store) {
+		if err := store.SetPassword("correct horse battery"); err != nil {
+			t.Fatalf("seed passphrase: %v", err)
+		}
+	})
+	request := httptest.NewRequest(http.MethodPut, backupSettingsPath, strings.NewReader(`{"restoreMode": "merge"}`))
+	recorder := httptest.NewRecorder()
+	handler.serveSettings(recorder, request, 42)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", recorder.Code, recorder.Body)
+	}
+	if !store.Settings().PasswordSet {
+		t.Fatal("an unrelated update cleared the passphrase")
+	}
+}
+
+func TestInspectIsPostOnly(t *testing.T) {
+	handler, _, _ := newTestBackupHandler(t, nil)
+	request := httptest.NewRequest(http.MethodGet, backupInspectPath, nil)
+	recorder := httptest.NewRecorder()
+	handler.serveInspect(recorder, request, 42)
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", recorder.Code)
+	}
+	if allow := recorder.Header().Get("Allow"); allow != "POST" {
+		t.Fatalf("Allow = %q, want POST", allow)
+	}
+}
+
+func TestInspectNeedsASnapshot(t *testing.T) {
+	handler, _, _ := newTestBackupHandler(t, nil)
+	for name, body := range map[string]string{
+		"absent":    `{}`,
+		"zero":      `{"messageId": 0}`,
+		"negative":  `{"messageId": -3}`,
+		"malformed": `{"messageId":`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, backupInspectPath, strings.NewReader(body))
+			recorder := httptest.NewRecorder()
+			handler.serveInspect(recorder, request, 42)
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (body %s)", recorder.Code, recorder.Body)
+			}
+		})
+	}
+}
+
 // TestIsBackupPathMatchesExactly keeps a lookalike path from being routed into
 // the backup handler, where the prefix would decide which endpoint runs.
 func TestIsBackupPathMatchesExactly(t *testing.T) {
-	for _, path := range []string{backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath} {
+	for _, path := range []string{backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath, backupInspectPath} {
 		if !isBackupPath(path) {
 			t.Fatalf("isBackupPath(%q) = false, want true", path)
 		}

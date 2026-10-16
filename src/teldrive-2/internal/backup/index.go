@@ -45,6 +45,36 @@ type Index struct {
 	Channels  []Channel `json:"channels"`
 	Files     []File    `json:"files"`
 	Parts     []Part    `json:"parts"`
+	// Sealed is not part of the document. It records that the bytes on the wire
+	// were encrypted, which the plaintext itself cannot say, so a summary can
+	// report how a snapshot was stored.
+	Sealed bool `json:"-"`
+}
+
+// IndexSummary is what a snapshot contains, without any of its bulk. It is what
+// the settings page shows before anyone commits to a restore.
+type IndexSummary struct {
+	Format    string    `json:"format"`
+	Version   int       `json:"version"`
+	CreatedAt time.Time `json:"createdAt"`
+	UserID    int64     `json:"userId"`
+	Counts    Counts    `json:"counts"`
+	Sealed    bool      `json:"sealed"`
+}
+
+// Summary describes the index without handing out its contents.
+func (i *Index) Summary() IndexSummary {
+	if i == nil {
+		return IndexSummary{}
+	}
+	return IndexSummary{
+		Format:    i.Format,
+		Version:   i.Version,
+		CreatedAt: i.CreatedAt,
+		UserID:    i.UserID,
+		Counts:    i.Counts,
+		Sealed:    i.Sealed,
+	}
 }
 
 type Counts struct {

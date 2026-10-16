@@ -141,7 +141,7 @@ func isDAVPath(path string) bool {
 // literal, so there is no prefix to get wrong.
 func isBackupPath(path string) bool {
 	switch path {
-	case backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath:
+	case backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath, backupInspectPath:
 		return true
 	default:
 		return false
