@@ -15,6 +15,7 @@ export const queryKeys = {
   webdavConfig: ["webdav-config"] as const,
   backupConfig: ["backup-config"] as const,
   backupSnapshots: ["backup-snapshots"] as const,
+  vault: ["settings-vault"] as const,
   autostart: ["system-autostart"] as const,
   webdavMount: ["system-webdav-mount"] as const,
 };

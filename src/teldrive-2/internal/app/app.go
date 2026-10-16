@@ -39,6 +39,7 @@ import (
 	"github.com/tgdrive/teldrive/v2/internal/telegramstore"
 	"github.com/tgdrive/teldrive/v2/internal/transfer"
 	"github.com/tgdrive/teldrive/v2/internal/uploads"
+	"github.com/tgdrive/teldrive/v2/internal/vault"
 )
 
 var (
@@ -267,6 +268,15 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	if err != nil {
 		return nil, fmt.Errorf("configure backups: %w", err)
 	}
+	vaultHandler, err := newVaultHandler(vaultConfig{
+		store:       vault.NewStore(vault.DefaultDataDir(), dependencies.Logger),
+		cfg:         cfg,
+		authService: authService,
+		logger:      dependencies.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure settings vault: %w", err)
+	}
 	extras, err := newExtraAPI(extraAPIConfig{
 		catalogService: catalogService,
 		uploadService:  uploadService,
@@ -275,6 +285,7 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		authService:    authService,
 		configStore:    configStore,
 		backupHandler:  backupHandler,
+		vaultHandler:   vaultHandler,
 		httpAddress:    cfg.HTTP.Address,
 		logger:         dependencies.Logger,
 	})

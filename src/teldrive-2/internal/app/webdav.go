@@ -26,6 +26,7 @@ type extraAPIConfig struct {
 	authService    *authn.Service
 	configStore    *webdav.ConfigStore
 	backupHandler  *backupHandler
+	vaultHandler   *vaultHandler
 	httpAddress    string
 	executablePath string
 	logger         *slog.Logger
@@ -44,6 +45,7 @@ type extraAPI struct {
 	settings http.Handler
 	system   http.Handler
 	backup   http.Handler
+	vault    http.Handler
 }
 
 const (
@@ -97,6 +99,7 @@ func newExtraAPI(config extraAPIConfig) (*extraAPI, error) {
 		settings: http.HandlerFunc(handler.ServeConfig),
 		system:   system,
 		backup:   config.backupHandler,
+		vault:    config.vaultHandler,
 	}, nil
 }
 
@@ -111,6 +114,10 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 	if h.backup != nil {
 		backup = security.middleware(browserCSRFMiddleware(h.backup))
 	}
+	var vaultHandler http.Handler
+	if h.vault != nil {
+		vaultHandler = security.middleware(browserCSRFMiddleware(h.vault))
+	}
 
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -120,6 +127,8 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 			system.ServeHTTP(w, r)
 		case backup != nil && isBackupPath(r.URL.Path):
 			backup.ServeHTTP(w, r)
+		case vaultHandler != nil && isVaultPath(r.URL.Path):
+			vaultHandler.ServeHTTP(w, r)
 		case isDAVPath(r.URL.Path):
 			dav.ServeHTTP(w, r)
 		default:
@@ -142,6 +151,16 @@ func isDAVPath(path string) bool {
 func isBackupPath(path string) bool {
 	switch path {
 	case backupSettingsPath, backupRunPath, backupScanPath, backupSnapshotPath, backupRestorePath, backupInspectPath:
+		return true
+	default:
+		return false
+	}
+}
+
+// isVaultPath matches the settings-vault API, with the same exact-literal rule.
+func isVaultPath(path string) bool {
+	switch path {
+	case vaultPath, vaultForgetPath:
 		return true
 	default:
 		return false

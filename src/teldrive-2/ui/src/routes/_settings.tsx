@@ -51,6 +51,14 @@ const SETTINGS_GROUPS = [
     items: [
       { label: "Sessions", path: "/settings/sessions", icon: SessionsIcon },
       { label: "API keys", path: "/settings/api-keys", icon: KeyIcon },
+      // The vault holds the instance's own keys, so it sits with the other
+      // owner-only settings and carries the same capability the endpoint checks.
+      {
+        label: "Settings vault",
+        path: "/settings/vault",
+        icon: ShieldIcon,
+        capability: "system.manageUsers",
+      },
     ],
   },
   {
