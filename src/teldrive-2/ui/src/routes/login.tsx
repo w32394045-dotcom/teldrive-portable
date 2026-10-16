@@ -28,6 +28,8 @@ import {
   keepSignedIn as keepSignedInPreference,
   setKeepSignedIn as setKeepSignedInPreference,
 } from "@/auth/keep-signed-in";
+import { NetworkAccessPanel } from "@/features/lan/NetworkAccessPanel";
+import { readDeviceToken } from "@/features/lan/request";
 import { t } from "@/i18n";
 import { LocaleSelect } from "@/i18n/LocaleSelect";
 
@@ -107,6 +109,15 @@ function LoginPage() {
   // A published origin is a public surface: it offers key sign-in only. The
   // Telegram flow stays available on the machine that owns the account.
   const telegramAvailable = telegramSignInAllowed();
+  /**
+   * A device that reached this drive over the network and holds no approval.
+   *
+   * The check is deliberately about the absence of an approval rather than about
+   * the failure of any particular request: this page is reached precisely when
+   * the drive has refused everything, and the panel has to be there before there
+   * is an error to react to.
+   */
+  const networkDevice = !telegramAvailable && readDeviceToken() === null;
   const [method, setMethod] = useState<Method>(telegramAvailable ? "phone" : "key");
   const [step, setStep] = useState<Step>("phone");
   const [flowId, setFlowId] = useState("");
@@ -303,7 +314,12 @@ function LoginPage() {
             </Card.Description>
           </Card.Header>
           <Card.Content className="space-y-5 px-6 pb-6">
-            {telegramAvailable ? (
+            {networkDevice ? (
+              // A device on the network that holds no approval cannot use any of
+              // this form, so offering it would only be a dead end. What it can
+              // do is ask.
+              <NetworkAccessPanel />
+            ) : telegramAvailable ? (
               <Tabs
                 selectedKey={method}
                 onSelectionChange={(key) => {

@@ -2,6 +2,7 @@ import createFetchClient from "openapi-fetch";
 import createQueryClient from "openapi-react-query";
 import { readApiKey } from "@/auth/api-key";
 import { PERSIST_HEADER, persistHeaderValue } from "@/auth/keep-signed-in";
+import { DEVICE_HEADER, readDeviceToken } from "@/features/lan/request";
 import { normalizeApiError } from "./errors";
 import type { paths } from "./schema";
 
@@ -20,6 +21,11 @@ function withCredentials(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers);
   const key = readApiKey();
   if (key && !headers.has("X-Api-Key")) headers.set("X-Api-Key", key);
+  // An approved device carries its own credential, which the server turns into
+  // this machine's session. It goes out with every call because every call may
+  // be the first one after a restart.
+  const device = readDeviceToken();
+  if (device && !headers.has(DEVICE_HEADER)) headers.set(DEVICE_HEADER, device);
   if (!headers.has(PERSIST_HEADER)) headers.set(PERSIST_HEADER, persistHeaderValue());
   return { ...init, headers };
 }
