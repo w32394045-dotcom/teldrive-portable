@@ -3,7 +3,7 @@
 **Windows 上双击即用的便携网盘。** 自带数据库和网页界面，把 Telegram 变成自己的网盘；再加一层「局域网伴侣访问」——手机、平板可以接进来用，但让不让进，由这一台电脑说了算。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6.svg)]()
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6.svg)
 [![Release](https://img.shields.io/github/v/release/w32394045-dotcom/teldrive-portable?label=release)](https://github.com/w32394045-dotcom/teldrive-portable/releases)
 
 ---
