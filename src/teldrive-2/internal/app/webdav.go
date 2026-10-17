@@ -33,6 +33,10 @@ type extraAPIConfig struct {
 	// status endpoint: "is anybody waiting to be let in" needs the store, not
 	// the page's own view of it.
 	lan            *lanaccess.Store
+	desktopHandler *desktopHandler
+	// desktop reports whether a native shell is present, which is what decides
+	// whether the page offers "save to this computer" at all.
+	desktop        bool
 	httpAddress    string
 	executablePath string
 	logger         *slog.Logger
@@ -53,6 +57,7 @@ type extraAPI struct {
 	backup   http.Handler
 	vault    http.Handler
 	lan      http.Handler
+	desktop  http.Handler
 }
 
 const (
@@ -97,6 +102,7 @@ func newExtraAPI(config extraAPIConfig) (*extraAPI, error) {
 		executable:  executable,
 		logger:      config.logger,
 		lan:         config.lan,
+		desktop:     config.desktop,
 	})
 	if err != nil {
 		return nil, err
@@ -109,6 +115,7 @@ func newExtraAPI(config extraAPIConfig) (*extraAPI, error) {
 		backup:   config.backupHandler,
 		vault:    config.vaultHandler,
 		lan:      config.lanHandler,
+		desktop:  config.desktopHandler,
 	}, nil
 }
 
@@ -135,6 +142,12 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 	if h.lan != nil {
 		lan = security.middleware(h.lan)
 	}
+	// The desktop routes write files outside the data directory and open native
+	// dialogs, so they get the same browser-session treatment as the rest.
+	var desktopHost http.Handler
+	if h.desktop != nil {
+		desktopHost = security.middleware(browserCSRFMiddleware(h.desktop))
+	}
 
 	dispatch := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -146,6 +159,8 @@ func (h *extraAPI) wrap(next http.Handler, security *requestSecurity, logger *sl
 			backup.ServeHTTP(w, r)
 		case vaultHandler != nil && isVaultPath(r.URL.Path):
 			vaultHandler.ServeHTTP(w, r)
+		case desktopHost != nil && isDesktopPath(r.URL.Path):
+			desktopHost.ServeHTTP(w, r)
 		case lan != nil && strings.HasPrefix(r.URL.Path, lanPathPrefix):
 			lan.ServeHTTP(w, r)
 		case isDAVPath(r.URL.Path):
@@ -180,6 +195,16 @@ func isBackupPath(path string) bool {
 func isVaultPath(path string) bool {
 	switch path {
 	case vaultPath, vaultForgetPath:
+		return true
+	default:
+		return false
+	}
+}
+
+// isDesktopPath matches the native-shell API, again by exact literal.
+func isDesktopPath(path string) bool {
+	switch path {
+	case desktopDownloadsPath, desktopFolderPath, desktopSavePath:
 		return true
 	default:
 		return false

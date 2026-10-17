@@ -29,6 +29,7 @@ import (
 	"github.com/tgdrive/teldrive/v2/internal/config"
 	"github.com/tgdrive/teldrive/v2/internal/database"
 	"github.com/tgdrive/teldrive/v2/internal/db/sqlcgen"
+	"github.com/tgdrive/teldrive/v2/internal/desktop"
 	userevents "github.com/tgdrive/teldrive/v2/internal/events"
 	"github.com/tgdrive/teldrive/v2/internal/fileops"
 	"github.com/tgdrive/teldrive/v2/internal/health"
@@ -57,6 +58,10 @@ type Dependencies struct {
 	// one. A snapshot may carry it so a rebuilt machine can read the secrets the
 	// snapshot also carries.
 	VaultKey string
+	// Desktop is the native shell, when the drive was started inside one. It is
+	// how the page can ask for a folder on this computer, and how the settings
+	// page learns that saving to this computer is even possible.
+	Desktop DesktopBridge
 }
 
 type App struct {
@@ -312,6 +317,22 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 	if err != nil {
 		return nil, fmt.Errorf("configure local-network access: %w", err)
 	}
+	// The shell's preferences - where a save goes, whether to ask every time -
+	// live with the rest of this machine's data, next to the database.
+	desktopStore := desktop.NewSettingsStore(filepath.Dir(backupStore.Path()))
+	if err := desktopStore.Load(); err != nil {
+		logger.Warn("desktop.settings", "error", err)
+	}
+	desktopHandler, err := newDesktopHandler(desktopConfig{
+		store:       desktopStore,
+		shell:       dependencies.Desktop,
+		downloader:  downloader,
+		authService: authService,
+		logger:      dependencies.Logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure the desktop integration: %w", err)
+	}
 	extras, err := newExtraAPI(extraAPIConfig{
 		catalogService: catalogService,
 		uploadService:  uploadService,
@@ -323,6 +344,8 @@ func New(ctx context.Context, cfg config.Config, dependencies Dependencies) (*Ap
 		vaultHandler:   vaultHandler,
 		lanHandler:     lanHandler,
 		lan:            lanStore,
+		desktopHandler: desktopHandler,
+		desktop:        dependencies.Desktop != nil,
 		httpAddress:    cfg.HTTP.Address,
 		logger:         dependencies.Logger,
 	})

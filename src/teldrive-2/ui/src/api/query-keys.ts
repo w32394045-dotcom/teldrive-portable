@@ -18,6 +18,7 @@ export const queryKeys = {
   vault: ["settings-vault"] as const,
   lanAccess: ["lan-access"] as const,
   systemStatus: ["system-status"] as const,
+  desktopSettings: ["desktop-settings"] as const,
   autostart: ["system-autostart"] as const,
   webdavMount: ["system-webdav-mount"] as const,
 };

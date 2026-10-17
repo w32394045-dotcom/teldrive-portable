@@ -11,8 +11,8 @@ import {
   type LanDevice,
   lanQueryOptions,
   setNetworkEnabled,
-  systemStatusQueryOptions,
 } from "@/features/lan/config";
+import { systemStatusQueryOptions } from "@/features/system/status";
 import { t } from "@/i18n";
 import { getQueryClient } from "@/lib/queryClient";
 

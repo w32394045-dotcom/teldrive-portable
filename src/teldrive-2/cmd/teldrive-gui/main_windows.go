@@ -167,6 +167,7 @@ func run() error {
 			Logger:   logger,
 			Version:  version,
 			VaultKey: unlocked.Key,
+			Desktop:  shellBridge{},
 		})
 		if err != nil {
 			return fmt.Errorf("初始化 Teldrive 失败: %w", err)
@@ -206,6 +207,15 @@ func run() error {
 		logger.Warn("desktop.shutdown_timeout")
 	}
 	return runErr
+}
+
+// shellBridge is what the server is allowed to borrow from the shell. There is
+// exactly one thing today: a folder picker, which only a person sitting in front
+// of this computer can answer.
+type shellBridge struct{}
+
+func (shellBridge) ChooseFolder(title, initial string) (string, bool) {
+	return desktop.ChooseFolder(title, initial)
 }
 
 // state is what the tray reports, written by the poller and read by the UI

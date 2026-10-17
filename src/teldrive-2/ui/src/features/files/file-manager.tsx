@@ -1,5 +1,5 @@
 import { Button, Dropdown, Input, Label, TextField } from "@heroui/react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard } from "react-aria/useKeyboard";
@@ -12,7 +12,10 @@ import { BackgroundUploadDialog } from "@/components/background-upload-dialog";
 import { AppDialog } from "@/components/dialogs/app-dialog";
 import { isPreviewable } from "@/components/file-preview-dialog";
 import { Page, PageContent } from "@/components/page";
+import { saveFileToComputer } from "@/features/desktop/config";
+import { systemStatusQueryOptions } from "@/features/system/status";
 import { useUploadStore } from "@/features/uploads/store";
+import { t, tPlural } from "@/i18n";
 import PasteIcon from "~icons/gravity-ui/arrow-right-to-square";
 import UploadIcon from "~icons/gravity-ui/arrow-up-from-line";
 import FileIcon from "~icons/gravity-ui/file";
@@ -20,7 +23,6 @@ import FolderIcon from "~icons/gravity-ui/folder";
 import SplitIcon from "~icons/gravity-ui/layout-split-columns";
 import PlusIcon from "~icons/gravity-ui/plus";
 import CloseIcon from "~icons/gravity-ui/xmark";
-
 import { useFileClipboardStore } from "./clipboard-store";
 import { absoluteFileDownloadUrl, copyText, startFileDownload } from "./download";
 import { FileActionDialogs } from "./file-action-dialogs";
@@ -35,7 +37,6 @@ import {
   invalidSearchDates,
   type SearchState,
 } from "./search-state";
-import { t, tPlural } from "@/i18n";
 
 type FileBrowserView = "list" | "grid";
 type PaneId = "primary" | "secondary";
@@ -76,6 +77,19 @@ export function FileManagerPage({
   const activeSearch = criteria ? hasSearchCriteria(criteria) : true;
   const [filtersOpen, setFiltersOpen] = useState(false);
   const { data: currentUser } = useQuery(currentUserQueryOptions());
+  // Saving to this computer only exists when the drive is served by the native
+  // shell; the server reports that, and the action is hidden otherwise.
+  const { data: systemStatus } = useQuery(systemStatusQueryOptions());
+  const desktopAvailable = systemStatus?.desktop === true;
+  const saveToComputer = useMutation({
+    mutationFn: saveFileToComputer,
+    onSuccess: (saved) => toast.success(t("Saved to {{path}}", { path: saved.path })),
+    onError: (error) => {
+      toast.error(t("The file could not be saved to this computer"), {
+        description: userMessage(error),
+      });
+    },
+  });
   const canLocalImport = Boolean(currentUser?.capabilities.includes("system.localImport"));
 
   const primaryLocation: PaneLocation = {
@@ -360,7 +374,9 @@ export function FileManagerPage({
         );
       },
       `${target.files.length} item${target.files.length === 1 ? "" : "s"} ${target.mode === "copy" ? "copied" : "moved"}`,
-      target.mode === "copy" ? t("Items could not be copied") : t("Selected items could not be moved"),
+      target.mode === "copy"
+        ? t("Items could not be copied")
+        : t("Selected items could not be moved"),
       () => {
         setDestination(undefined);
         setPaneSelectedKeys(target.pane, new Set());
@@ -534,9 +550,7 @@ export function FileManagerPage({
     const selectedFiles = paneSelectedFiles(pane);
     try {
       await copyText(selectedFiles.map(absoluteFileDownloadUrl).join("\n"));
-      toast.success(
-        tPlural("{{count}} download links copied", selectedFiles.length),
-      );
+      toast.success(tPlural("{{count}} download links copied", selectedFiles.length));
     } catch (error) {
       toast.error(t("Download links could not be copied"), { description: userMessage(error) });
     }
@@ -700,6 +714,11 @@ export function FileManagerPage({
           setShareFile(selectedFiles[0]);
         }}
         onDownload={() => startFileDownload(selectedFiles[0])}
+        onSaveToComputer={
+          desktopAvailable && selectedFiles[0]
+            ? () => saveToComputer.mutate(selectedFiles[0].id)
+            : undefined
+        }
         onCopyDownloadLinks={() => void copyDownloadLinks(pane)}
         onMove={() => {
           setActivePane(pane);
@@ -789,7 +808,9 @@ export function FileManagerPage({
           {({ isDropTarget }) => (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden">
               {isDropTarget ? (
-                <div className="shrink-0 rounded-xl border-2 border-dashed border-accent bg-accent/10 px-4 py-4 text-center text-sm font-medium text-accent sm:px-6 sm:py-6">{t("Drop files to upload into {{path}}", { path: location.path })}</div>
+                <div className="shrink-0 rounded-xl border-2 border-dashed border-accent bg-accent/10 px-4 py-4 text-center text-sm font-medium text-accent sm:px-6 sm:py-6">
+                  {t("Drop files to upload into {{path}}", { path: location.path })}
+                </div>
               ) : null}
               {browser}
             </div>

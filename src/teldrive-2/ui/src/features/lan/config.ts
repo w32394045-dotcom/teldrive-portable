@@ -13,7 +13,6 @@ import { t } from "@/i18n";
  */
 const DEVICES_PATH = "/lan/devices";
 const NETWORK_PATH = "/lan/network";
-const STATUS_PATH = "/system/status";
 
 const deviceSchema = z.object({
   id: z.string(),
@@ -92,40 +91,5 @@ export function lanQueryOptions() {
     queryFn: fetchLanStatus,
     // Requests arrive while the page is open, so the list has to keep up.
     refetchInterval: 5000,
-  });
-}
-
-/**
- * Where this drive actually is. The addresses are computed by the server from
- * its own interfaces, which is the only place that knows them: a browser cannot
- * see the machine's LAN address, and hard-coding one would be a lie the moment
- * the machine changes networks.
- */
-const statusSchema = z.object({
-  address: z.string(),
-  url: z.string(),
-  networkUrl: z.string().optional(),
-  networkEnabled: z.boolean(),
-  boundToNetwork: z.boolean(),
-  pendingDevices: z.number(),
-});
-
-export type SystemStatus = z.infer<typeof statusSchema>;
-
-export async function fetchSystemStatus(): Promise<SystemStatus> {
-  return parse(
-    await apiFetch(STATUS_PATH),
-    statusSchema,
-    "The local-network response is malformed.",
-  );
-}
-
-export function systemStatusQueryOptions() {
-  return queryOptions({
-    queryKey: queryKeys.systemStatus,
-    queryFn: fetchSystemStatus,
-    // The address only changes when the machine changes networks, but that is
-    // exactly the moment somebody has this page open and is reading it.
-    refetchInterval: 30_000,
   });
 }

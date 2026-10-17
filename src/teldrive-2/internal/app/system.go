@@ -57,6 +57,9 @@ type systemConfig struct {
 	// use, and is anybody waiting to be let in": the page and the desktop shell
 	// both have to ask somebody.
 	lan *lanaccess.Store
+	// desktop reports whether a native shell is running this server, which is
+	// what makes saving to this computer possible at all.
+	desktop bool
 }
 
 // systemHandler exposes the operating-system integration: start Teldrive at
@@ -68,6 +71,7 @@ type systemHandler struct {
 	httpAddress string
 	logger      *slog.Logger
 	lan         *lanaccess.Store
+	desktop     bool
 }
 
 func newSystemHandler(config systemConfig) (*systemHandler, error) {
@@ -84,6 +88,7 @@ func newSystemHandler(config systemConfig) (*systemHandler, error) {
 		httpAddress: config.httpAddress,
 		logger:      config.logger,
 		lan:         config.lan,
+		desktop:     config.desktop,
 	}, nil
 }
 
@@ -127,6 +132,9 @@ type statusResponse struct {
 	BoundToNetwork bool `json:"boundToNetwork"`
 	// PendingDevices counts devices waiting to be approved.
 	PendingDevices int `json:"pendingDevices"`
+	// Desktop reports whether this server is running inside the native shell, so
+	// the page knows that "save to this computer" can work.
+	Desktop bool `json:"desktop"`
 }
 
 func (h *systemHandler) serveStatus(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +149,7 @@ func (h *systemHandler) serveStatus(w http.ResponseWriter, r *http.Request) {
 		URL:            siteURL(address),
 		NetworkURL:     networkURLFor(address, interfaceIPv4s()),
 		BoundToNetwork: boundToNetwork(address),
+		Desktop:        h.desktop,
 	}
 	if h.lan != nil {
 		response.NetworkEnabled = h.lan.NetworkEnabled()

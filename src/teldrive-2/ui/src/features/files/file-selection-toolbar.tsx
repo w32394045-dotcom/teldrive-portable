@@ -1,15 +1,16 @@
 import { Button } from "@heroui/react";
+import { t } from "@/i18n";
 import DownloadIcon from "~icons/gravity-ui/arrow-down-to-line";
 import CopyIcon from "~icons/gravity-ui/copy";
 import CopyLinkIcon from "~icons/gravity-ui/copy-arrow-right";
 import MoveIcon from "~icons/gravity-ui/folder-arrow-right";
+import HardDriveIcon from "~icons/gravity-ui/hard-drive";
 import LinkIcon from "~icons/gravity-ui/link";
 import PencilIcon from "~icons/gravity-ui/pencil";
 import CutIcon from "~icons/gravity-ui/scissors";
 import TrashIcon from "~icons/gravity-ui/trash-bin";
 import CloseIcon from "~icons/gravity-ui/xmark";
 import type { FileEntry } from "../../api/types";
-import { t } from "@/i18n";
 
 export function FileSelectionToolbar({
   selectedFiles,
@@ -20,6 +21,7 @@ export function FileSelectionToolbar({
   onDuplicate,
   onShare,
   onDownload,
+  onSaveToComputer,
   onCopyDownloadLinks,
   onMove,
   onTrash,
@@ -33,6 +35,7 @@ export function FileSelectionToolbar({
   onDuplicate?: () => void;
   onShare?: () => void;
   onDownload?: () => void;
+  onSaveToComputer?: () => void;
   onCopyDownloadLinks?: () => void;
   onMove?: () => void;
   onTrash?: () => void;
@@ -49,7 +52,9 @@ export function FileSelectionToolbar({
         aria-label={t("Selected file actions")}
         className="pointer-events-auto flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-border bg-surface/95 p-1.5 shadow-xl backdrop-blur"
       >
-        <span className="shrink-0 rounded-full bg-accent/10 px-3 py-2 text-sm font-medium text-accent">{t("{{selectedCount}} selected", { selectedCount })}</span>
+        <span className="shrink-0 rounded-full bg-accent/10 px-3 py-2 text-sm font-medium text-accent">
+          {t("{{selectedCount}} selected", { selectedCount })}
+        </span>
         {onCut ? (
           <Button
             isIconOnly
@@ -120,6 +125,18 @@ export function FileSelectionToolbar({
             onPress={onDownload}
           >
             <DownloadIcon className="size-4" />
+          </Button>
+        ) : null}
+        {singleSelectedFile?.kind === "file" && onSaveToComputer ? (
+          <Button
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            aria-label={t("Save selected file to this computer")}
+            isDisabled={pending}
+            onPress={onSaveToComputer}
+          >
+            <HardDriveIcon className="size-4" />
           </Button>
         ) : null}
         {selectedOnlyFiles && onCopyDownloadLinks ? (

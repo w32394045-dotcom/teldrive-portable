@@ -3,10 +3,15 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import CopyIcon from "~icons/gravity-ui/copy";
 import { userMessage } from "@/api/errors";
 import { queryKeys } from "@/api/query-keys";
 import { SettingsPageHeader, SettingsRow, SettingsSection } from "@/components/settings-layout";
+import {
+  chooseDownloadFolder,
+  type DesktopSettings,
+  desktopSettingsQueryOptions,
+  updateDesktopSettings,
+} from "@/features/desktop/config";
 import { copyText } from "@/features/files/download";
 import {
   autostartQueryOptions,
@@ -15,9 +20,11 @@ import {
   mountQueryOptions,
   updateAutostart,
 } from "@/features/system/config";
+import { systemStatusQueryOptions } from "@/features/system/status";
 import { updateWebDAVConfig, webdavConfigQueryOptions } from "@/features/webdav/config";
-import { getQueryClient } from "@/lib/queryClient";
 import { t } from "@/i18n";
+import { getQueryClient } from "@/lib/queryClient";
+import CopyIcon from "~icons/gravity-ui/copy";
 
 export const Route = createFileRoute("/_settings/settings/webdav")({
   component: WebDAVSettings,
@@ -182,6 +189,7 @@ function WebDAVSettings() {
         </SettingsRow>
       </SettingsSection>
       <AutomationSection enabled={enabled} />
+      <DownloadSection />
       <SettingsSection
         title={t("What works today")}
         description={t(
@@ -402,7 +410,8 @@ function AutomationSection({ enabled }: { enabled: boolean }) {
                       {item.current || item.required ? (
                         <span className="text-muted/80">
                           {" "}
-                          {t("Current")}: {item.current ?? "—"} → {t("Needed")}: {item.required ?? "—"}
+                          {t("Current")}: {item.current ?? "—"} → {t("Needed")}:{" "}
+                          {item.required ?? "—"}
                         </span>
                       ) : null}
                     </li>
@@ -440,7 +449,9 @@ function AutomationSection({ enabled }: { enabled: boolean }) {
               : mounted && autostartOn
                 ? t("Teldrive starts at login and the drive is mounted automatically.")
                 : autostartOn
-                  ? t("Teldrive starts at login; mount the drive to make it available straight away.")
+                  ? t(
+                      "Teldrive starts at login; mount the drive to make it available straight away.",
+                    )
                   : t("Enable both to have the drive ready after every sign-in.")
           }
           align="start"
@@ -480,4 +491,99 @@ async function copyFixCommand(command: string) {
   } catch {
     toast.error(t("The command could not be copied"));
   }
+}
+
+/**
+ * Where "save to this computer" writes files.
+ *
+ * The browser's own download folder cannot be changed by a page. The process
+ * that serves the page can change where it saves, so the page asks it: the folder
+ * is a preference of this computer, and the picker is a dialog on this computer's
+ * screen. Nothing here is shown unless the drive was started by the native shell.
+ */
+function DownloadSection() {
+  const status = useQuery(systemStatusQueryOptions());
+  const desktop = status.data?.desktop === true;
+  const settings = useQuery({ ...desktopSettingsQueryOptions(), enabled: desktop });
+
+  const saved = (next: DesktopSettings) => {
+    getQueryClient().setQueryData(queryKeys.desktopSettings, next);
+  };
+
+  const choose = useMutation({
+    mutationFn: chooseDownloadFolder,
+    onSuccess: async (path) => {
+      try {
+        saved(await updateDesktopSettings({ downloadDir: path }));
+        toast.success(t("Download folder updated"));
+      } catch (error) {
+        toast.error(t("The download folder could not be changed"), {
+          description: userMessage(error),
+        });
+      }
+    },
+    onError: (error) => {
+      toast.error(t("The download folder could not be changed"), {
+        description: userMessage(error),
+      });
+    },
+  });
+
+  const ask = useMutation({
+    mutationFn: (askEveryTime: boolean) => updateDesktopSettings({ askEveryTime }),
+    onSuccess: saved,
+    onError: (error) => {
+      toast.error(t("The download folder could not be changed"), {
+        description: userMessage(error),
+      });
+    },
+  });
+
+  if (!desktop) return null;
+
+  const busy = choose.isPending || ask.isPending || settings.isPending;
+  const folder = settings.data?.downloadDir || settings.data?.defaultDir || "";
+
+  return (
+    <SettingsSection
+      title={t("Save to this computer")}
+      description={t(
+        "Files saved from the drive go to a folder you choose here, instead of the browser's own download folder.",
+      )}
+    >
+      <SettingsRow label={t("Folder")} description={folder}>
+        <div className="flex items-center justify-end gap-3">
+          {choose.isPending ? <Spinner size="sm" /> : null}
+          <Button
+            variant="tertiary"
+            isDisabled={busy || !(settings.data?.canChoose ?? false)}
+            onPress={() => choose.mutate()}
+          >
+            {t("Choose folder")}
+          </Button>
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        label={t("Ask every time")}
+        description={t("Show the folder picker for every save instead of using the folder above.")}
+      >
+        <div className="flex items-center justify-end gap-3">
+          {ask.isPending ? <Spinner size="sm" /> : null}
+          <Switch
+            aria-label={t("Ask every time")}
+            isSelected={settings.data?.askEveryTime ?? false}
+            isDisabled={busy}
+            onChange={(value) => ask.mutate(value)}
+          >
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+              <Label className="sr-only">{t("Ask every time")}</Label>
+            </Switch.Content>
+          </Switch>
+        </div>
+      </SettingsRow>
+    </SettingsSection>
+  );
 }
