@@ -2,11 +2,14 @@
 
 package desktop
 
-// The shell is Windows-only. Everywhere else the drive is the console program it
-// has always been, and saying so is better than a window that cannot exist.
+// The tray is Windows-only. Everywhere else the drive is the console program it
+// has always been, and saying so is better than a presence that cannot exist.
 
-// Run reports that there is no native shell on this platform.
+// Run reports that there is no tray on this platform.
 func Run(Callbacks) error { return ErrUnsupported }
+
+// Stop does nothing without a message loop to end.
+func Stop() {}
 
 // Message does nothing without a message box to show it in.
 func Message(string, string) {}

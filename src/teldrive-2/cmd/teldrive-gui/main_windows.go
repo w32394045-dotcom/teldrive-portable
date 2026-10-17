@@ -1,15 +1,16 @@
 //go:build windows
 
-// Command teldrive-gui is the native Windows shell for the portable drive.
+// Command teldrive-gui starts the portable drive the way people expect an
+// application to start: double-click it and the drive opens.
 //
-// The drive used to be held open by a console window: close it and the server
-// stops. This program is the same server with a window and a tray icon instead,
-// so the two things a person actually needs - where the drive is, and whether
-// somebody is waiting to be let in - are on screen, and the web interface is
-// still exactly where it was, one button away.
+// The drive is a web application, so "opens" means the page appears in the
+// browser already installed on the machine. Nothing is embedded here - no
+// WebView, no second interface - which is why this program has no window of its
+// own. All it leaves behind is a tray icon: the one thing a windowless program
+// needs in order to be visible, stoppable, and able to reopen the page.
 //
-// It is built with -H=windowsgui, so there is no console at all; everything that
-// would have been printed goes to data/teldrive-gui.log.
+// It is built with -H=windowsgui, so there is no console; everything that would
+// have been printed goes to data/teldrive-gui.log.
 package main
 
 import (
@@ -122,6 +123,12 @@ func run() error {
 	serverDone := make(chan struct{})
 	close(serverDone)
 
+	// The window that shows the drive is the browser's own app mode, with a
+	// profile of the drive's own: the login survives restarts and the person's
+	// normal browsing is never touched.
+	profileDir := filepath.Join(dataDirOf(layout, *configPath), "browser-profile")
+	open := func(url string) error { return openWindow(url, profileDir, logger) }
+
 	address := ""
 	startedHere := false
 	if inBundle && *configPath == layout.ConfigPath {
@@ -129,24 +136,26 @@ func run() error {
 		launcher.SetDatabase(cfg.Database.URL)
 		launcher.SetHTTPAddress(cfg.HTTP.Address)
 		if running := launcher.RunningAddress(ctx); running != "" {
-			// A second start must find the running drive rather than begin a rival
-			// one; the port has moved before, which is why the launcher, not the
-			// configuration file, answers this.
-			address = running
-			state.setDetail("服务已经在运行；这个窗口只是把它显示出来。")
-		} else {
-			selected, err := launcher.SelectAddress(ctx)
-			if err != nil {
-				return err
+			// A second double-click must open the drive that is already running:
+			// starting a rival server, or a second tray icon, is never what the
+			// person meant. The port has moved before, which is why the launcher,
+			// not the configuration file, answers where the drive is.
+			if *autostart {
+				return nil
 			}
-			cfg.HTTP.Address = selected
-			address = launcher.ServerURL()
-			if err := launcher.Prepare(ctx); err != nil {
-				return err
-			}
-			defer launcher.StopPostgres()
-			startedHere = true
+			return open(running)
 		}
+		selected, err := launcher.SelectAddress(ctx)
+		if err != nil {
+			return err
+		}
+		cfg.HTTP.Address = selected
+		address = launcher.ServerURL()
+		if err := launcher.Prepare(ctx); err != nil {
+			return err
+		}
+		defer launcher.StopPostgres()
+		startedHere = true
 	} else {
 		address = siteURL(cfg.HTTP.Address)
 		startedHere = true
@@ -175,22 +184,21 @@ func run() error {
 		}()
 	}
 
-	go poll(ctx, state, logger, !*autostart)
+	go poll(ctx, state, logger, !*autostart, open)
 
 	runErr := desktop.Run(desktop.Callbacks{
-		Title:       "Teldrive " + version,
-		StartHidden: *autostart,
-		Snapshot:    state.snapshot,
+		Title:  "Teldrive " + version,
+		Status: state.status,
 		OpenBrowser: func() error {
-			return bundled.OpenBrowser(state.addressValue())
+			return open(state.addressValue())
 		},
 		Copy: desktop.CopyToClipboard,
 		Quit: cancel,
 		Log:  func(msg string, args ...any) { logger.Info(msg, args...) },
 	})
 
-	// The window is gone: close the server, then wait for it to finish rather
-	// than pulling the process out from under an upload in progress.
+	// The tray is gone: close the server, then wait for it to finish rather than
+	// pulling the process out from under an upload in progress.
 	cancel()
 	select {
 	case <-serverDone:
@@ -200,7 +208,7 @@ func run() error {
 	return runErr
 }
 
-// state is what the window shows, written by the poller and read by the UI
+// state is what the tray reports, written by the poller and read by the UI
 // thread. Every field is behind the mutex because those are two goroutines.
 type state struct {
 	mu      sync.Mutex
@@ -240,10 +248,10 @@ func (s *state) set(address, network string, pending int, detail string) {
 	s.detail = detail
 }
 
-func (s *state) snapshot() desktop.Snapshot {
+func (s *state) status() desktop.Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return desktop.Snapshot{
+	return desktop.Status{
 		Address:        s.address,
 		NetworkAddress: s.network,
 		Pending:        s.pending,
@@ -251,8 +259,8 @@ func (s *state) snapshot() desktop.Snapshot {
 	}
 }
 
-// statusPayload mirrors the fields of GET /api/system/status that the window
-// shows. It is read over HTTP rather than out of the running application: the
+// statusPayload mirrors the fields of GET /api/system/status that the tray
+// reflects. It is read over HTTP rather than out of the running application: the
 // endpoint is the same one the settings page uses, so there is one answer to
 // "where is this drive", not two.
 type statusPayload struct {
@@ -263,7 +271,7 @@ type statusPayload struct {
 	PendingDevices int    `json:"pendingDevices"`
 }
 
-func poll(ctx context.Context, state *state, logger *slog.Logger, openBrowser bool) {
+func poll(ctx context.Context, state *state, logger *slog.Logger, openBrowser bool, open func(string) error) {
 	client := &http.Client{Timeout: requestTimeout}
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -294,7 +302,7 @@ func poll(ctx context.Context, state *state, logger *slog.Logger, openBrowser bo
 		}
 		state.set(payload.URL, payload.NetworkURL, payload.PendingDevices, describe(payload))
 		if openBrowser {
-			openOnce(state, payload.URL, logger)
+			openOnce(state, payload.URL, open, logger)
 		}
 	}
 }
@@ -317,10 +325,10 @@ func describe(payload statusPayload) string {
 	return strings.Join(parts, " · ")
 }
 
-// openOnce opens the browser the first time the drive answers, which is what a
+// openOnce opens the drive the first time it answers, which is what a
 // double-click has always done. It happens after the endpoint replies rather
-// than on a timer, so the page is never opened at a port nothing listens on.
-func openOnce(state *state, url string, logger *slog.Logger) {
+// than on a timer, so the window is never opened at a port nothing listens on.
+func openOnce(state *state, url string, open func(string) error, logger *slog.Logger) {
 	state.mu.Lock()
 	already := state.opened
 	state.opened = true
@@ -328,9 +336,23 @@ func openOnce(state *state, url string, logger *slog.Logger) {
 	if already || url == "" {
 		return
 	}
-	if err := bundled.OpenBrowser(url); err != nil {
-		logger.Warn("desktop.open_browser", "error", err)
+	if err := open(url); err != nil {
+		logger.Warn("desktop.open_window", "error", err)
 	}
+}
+
+// openWindow shows the drive in an app-mode window of the installed browser: the
+// page and nothing else, no tabs, no address bar, and no embedded engine. A
+// machine without a Chromium-based browser still gets the page, in a normal tab.
+func openWindow(url, profileDir string, logger *slog.Logger) error {
+	if url == "" {
+		return errors.New("the drive is not ready yet")
+	}
+	if err := desktop.OpenAppWindow(url, profileDir); err != nil {
+		logger.Warn("desktop.app_window", "error", err)
+		return bundled.OpenBrowser(url)
+	}
+	return nil
 }
 
 // unlock opens the settings vault. When the vault was sealed in prompt mode the
@@ -374,11 +396,7 @@ func loadConfig(path string) (config.Config, error) {
 // newLogger writes to a file beside the data, because a windowed program has no
 // console to print diagnostics to.
 func newLogger(cfg config.Config, layout bundled.Layout, configPath string) (*slog.Logger, func(), error) {
-	dir := layout.DataDir
-	if dir == "" {
-		dir = filepath.Dir(configPath)
-	}
-	path := filepath.Join(dir, "teldrive-gui.log")
+	path := filepath.Join(dataDirOf(layout, configPath), "teldrive-gui.log")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, nil, fmt.Errorf("无法写入日志 %s: %w", path, err)
@@ -389,6 +407,17 @@ func newLogger(cfg config.Config, layout bundled.Layout, configPath string) (*sl
 		return nil, nil, err
 	}
 	return logger, func() { file.Close() }, nil
+}
+
+// dataDirOf is the directory that belongs to this installation: the bundle's
+// data\ when running from a bundle, and the configuration file's own folder
+// otherwise. The log and the browser profile both live there, so nothing is
+// written outside the folder a person can copy to another machine.
+func dataDirOf(layout bundled.Layout, configPath string) string {
+	if layout.DataDir != "" {
+		return layout.DataDir
+	}
+	return filepath.Dir(configPath)
 }
 
 // siteURL turns a listen address into something a browser can open. A wildcard

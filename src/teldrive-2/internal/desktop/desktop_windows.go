@@ -11,11 +11,11 @@ import (
 	"unsafe"
 )
 
-// The shell is written directly against user32/shell32 rather than through a
-// toolkit. The whole window is a handful of stock controls and one tray icon,
-// and every Go GUI toolkit on Windows wants cgo, which this project builds
-// without on purpose: a portable drive is copied between machines, and a static
-// binary with no runtime to install is the only kind that survives that.
+// The tray is written directly against user32/shell32 rather than through a
+// toolkit. It is one icon and one popup menu; every Go GUI toolkit on Windows
+// wants cgo, and this project builds with CGO_ENABLED=0 on purpose: a portable
+// drive is copied between machines, and a static binary with nothing to install
+// is the only kind that survives that.
 
 var (
 	user32   = syscall.NewLazyDLL("user32.dll")
@@ -27,7 +27,6 @@ var (
 
 var (
 	procRegisterClassExW    = user32.NewProc("RegisterClassExW")
-	procUnregisterClassW    = user32.NewProc("UnregisterClassW")
 	procCreateWindowExW     = user32.NewProc("CreateWindowExW")
 	procDefWindowProcW      = user32.NewProc("DefWindowProcW")
 	procDestroyWindow       = user32.NewProc("DestroyWindow")
@@ -36,10 +35,9 @@ var (
 	procDispatchMessageW    = user32.NewProc("DispatchMessageW")
 	procPostQuitMessage     = user32.NewProc("PostQuitMessage")
 	procPostMessageW        = user32.NewProc("PostMessageW")
+	procPostThreadMessageW  = user32.NewProc("PostThreadMessageW")
+	procGetCurrentThreadID  = kernel32.NewProc("GetCurrentThreadId")
 	procSendMessageW        = user32.NewProc("SendMessageW")
-	procShowWindow          = user32.NewProc("ShowWindow")
-	procUpdateWindow        = user32.NewProc("UpdateWindow")
-	procSetWindowTextW      = user32.NewProc("SetWindowTextW")
 	procGetWindowTextW      = user32.NewProc("GetWindowTextW")
 	procSetTimer            = user32.NewProc("SetTimer")
 	procKillTimer           = user32.NewProc("KillTimer")
@@ -47,7 +45,6 @@ var (
 	procLoadCursorW         = user32.NewProc("LoadCursorW")
 	procLoadIconW           = user32.NewProc("LoadIconW")
 	procCreateIconFromRes   = user32.NewProc("CreateIconFromResourceEx")
-	procDestroyIcon         = user32.NewProc("DestroyIcon")
 	procGetCursorPos        = user32.NewProc("GetCursorPos")
 	procMessageBoxW         = user32.NewProc("MessageBoxW")
 	procCreatePopupMenu     = user32.NewProc("CreatePopupMenu")
@@ -58,77 +55,55 @@ var (
 	procEmptyClipboard      = user32.NewProc("EmptyClipboard")
 	procSetClipboardData    = user32.NewProc("SetClipboardData")
 	procCloseClipboard      = user32.NewProc("CloseClipboard")
-	procEnableWindow        = user32.NewProc("EnableWindow")
 	procIsDialogMessageW    = user32.NewProc("IsDialogMessageW")
 	procGetDlgItem          = user32.NewProc("GetDlgItem")
-
-	procGetStockObject = gdi32.NewProc("GetStockObject")
-
-	procShellNotifyIconW = shell32.NewProc("Shell_NotifyIconW")
-
-	procGetModuleHandleW = kernel32.NewProc("GetModuleHandleW")
-	procGlobalAlloc      = kernel32.NewProc("GlobalAlloc")
-	procGlobalLock       = kernel32.NewProc("GlobalLock")
-	procGlobalUnlock     = kernel32.NewProc("GlobalUnlock")
-	procRtlMoveMemory    = kernel32.NewProc("RtlMoveMemory")
-
-	procCoInitializeEx = ole32.NewProc("CoInitializeEx")
+	procGetStockObject      = gdi32.NewProc("GetStockObject")
+	procShellNotifyIconW    = shell32.NewProc("Shell_NotifyIconW")
+	procGetModuleHandleW    = kernel32.NewProc("GetModuleHandleW")
+	procGlobalAlloc         = kernel32.NewProc("GlobalAlloc")
+	procGlobalLock          = kernel32.NewProc("GlobalLock")
+	procGlobalUnlock        = kernel32.NewProc("GlobalUnlock")
+	procRtlMoveMemory       = kernel32.NewProc("RtlMoveMemory")
+	procCoInitializeEx      = ole32.NewProc("CoInitializeEx")
 )
 
 const (
-	// Control classes, as the window manager calls them.
-	classNameButton  = "BUTTON"
-	classNameStatic  = "STATIC"
-	classNameEdit    = "EDIT"
-	wndClassMainName = "TeldrivePortableShell"
-	wndClassPrompt   = "TeldrivePortablePrompt"
+	classNameButton = "BUTTON"
+	classNameStatic = "STATIC"
+	classNameEdit   = "EDIT"
+	wndClassTray    = "TeldrivePortableTray"
+	wndClassPrompt  = "TeldrivePortablePrompt"
 
-	// Styles.
+	// Styles. The tray window is never shown: it exists only to receive the
+	// notification area's messages.
 	wsOverlapped  = 0x00000000
 	wsCaption     = 0x00C00000
 	wsSysMenu     = 0x00080000
-	wsMinimizeBox = 0x00020000
-	wsVisible     = 0x10000000
 	wsChild       = 0x40000000
+	wsVisible     = 0x10000000
 	wsTabStop     = 0x00010000
 	wsBorder      = 0x00800000
-	wsVScroll     = 0x00200000
+	bsPushButton  = 0x00000000
+	ssLeft        = 0x00000000
+	esLeft        = 0x0000
+	esReadOnly    = 0x0800
+	esAutoHScroll = 0x0080
+	esPassword    = 0x0020
 
-	bsPushButton   = 0x00000000
-	bsAutoCheckBox = 0x00000003
-	ssLeft         = 0x00000000
-	ssRight        = 0x00000002
-	esLeft         = 0x0000
-	esReadOnly     = 0x0800
-	esAutoHScroll  = 0x0080
-	esPassword     = 0x0020
-	esMultiline    = 0x0004
-
-	// Window messages.
 	wmDestroy     = 0x0002
-	wmSize        = 0x0005
 	wmSetFont     = 0x0030
 	wmClose       = 0x0010
 	wmCommand     = 0x0111
 	wmTimer       = 0x0113
 	wmNull        = 0x0000
+	wmQuit        = 0x0012
 	wmLButtonUp   = 0x0202
 	wmLButtonDbl  = 0x0203
 	wmRButtonUp   = 0x0205
 	wmApp         = 0x8000
 	wmAppTray     = wmApp + 1
-	wmQuit        = 0x0012
-	wmKeyDown     = 0x0100
-	wmSysCommand  = 0x0112
-	scMinimize    = 0xF020
-	scRestore     = 0xF120
-	swHide        = 0
-	swShowNormal  = 1
-	swRestore     = 9
-	swMinimize    = 6
 	defaultGuiObj = 17 // DEFAULT_GUI_FONT
 
-	// Tray icon.
 	nimAdd     = 0x00000000
 	nimModify  = 0x00000001
 	nimDelete  = 0x00000002
@@ -137,52 +112,42 @@ const (
 	nifTip     = 0x00000004
 	nifInfo    = 0x00000010
 	niifInfo   = 0x00000001
-	// idiApplication and idcArrow are the stock resources; both are
+	// idiApplication and idcArrow are stock resources; both are
 	// MAKEINTRESOURCE values rather than handles to files.
 	idiApplication = 32512
 	idcArrow       = 32512
 
-	// Menus.
 	mfString      = 0x00000000
 	mfSeparator   = 0x00000800
-	mfGrayed      = 0x00000001
 	tpmReturnCmd  = 0x0100
 	tpmRightAlign = 0x0008
 	cfUnicodeText = 13
 	gmemMoveable  = 0x0002
 
-	// Dialog helpers.
 	mbOK            = 0x00000000
 	mbIconError     = 0x00000010
 	mbIconInfo      = 0x00000040
-	mbIconWarning   = 0x00000030
-	mbIconQuestion  = 0x00000020
 	mbSetForeground = 0x00010000
 
 	promptInputID  = 2001
 	promptOKID     = 2002
 	promptCancelID = 2003
 
-	idOpenBrowser = 3001
-	idCopyAddress = 3002
-	idShowWindow  = 3003
-	idQuit        = 3004
-	idMenuOpen    = 3101
-	idMenuCopy    = 3102
-	idMenuShow    = 3103
-	idMenuQuit    = 3104
+	idMenuOpen = 3101
+	idMenuCopy = 3102
+	idMenuQuit = 3103
 )
 
-// IconID is a user-chosen tray icon identity; any value works as long as it is
-// stable for the life of the icon.
-const trayIconID = 1
-
 const (
-	// timerRefresh is how often the labels and the tooltip are recomputed.
+	// trayIconID is any value, as long as it is stable for the life of the icon.
+	trayIconID = 1
+	// timerRefresh is the timer that keeps the tooltip honest.
 	timerRefresh = 1
 	// refreshIntervalMS is deliberately slow: the numbers barely move, and a
-	// window that redraws continuously is a window that wakes the CPU.
+	// program that wakes up continuously just to redraw a tooltip is a bug.
 	refreshIntervalMS = 2000
+	// maxTooltip is the notification area's limit, in characters.
+	maxTooltip = 120
 )
 
 type wndClassExW struct {
@@ -227,34 +192,21 @@ type notifyIconDataW struct {
 	dwInfoFlags      uint32
 }
 
-// shell is the single live window. The window procedure is a package function
+// tray is the single live icon. The window procedure is a package function
 // because the system calls it, so the state it needs lives here.
-type shell struct {
-	cb Callbacks
-
+type tray struct {
+	cb   Callbacks
 	hwnd uintptr
 	icon uintptr
-
-	titleLabel   uintptr
-	addressEdit  uintptr
-	networkEdit  uintptr
-	pendingLabel uintptr
-	detailLabel  uintptr
-	openButton   uintptr
-	copyButton   uintptr
-	quitButton   uintptr
-	hintLabel    uintptr
 
 	lastAddress string
 	notified    bool
 }
 
 var (
-	currentMu sync.Mutex
-	current   *shell
-
-	// promptValue carries the answer out of the modal prompt, whose message loop
-	// runs on the UI thread until its window is destroyed.
+	currentMu   sync.Mutex
+	current     *tray
+	uiThreadID  uintptr
 	promptMu    sync.Mutex
 	promptValue string
 	promptOK    bool
@@ -279,62 +231,58 @@ func call(proc *syscall.LazyProc, args ...uintptr) (uintptr, error) {
 	return result, nil
 }
 
-// Run creates the window and the tray icon and pumps messages until the user
-// quits. It blocks, and it must be called from the goroutine that owns the main
-// thread, because that is where the message queue lives.
+// Run creates the tray icon and pumps messages until the user quits. It blocks,
+// and it must be called from the goroutine that owns the main thread, because
+// that is where the message queue lives.
 func Run(callbacks Callbacks) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	// The shell does not need COM for anything it does today; initialising here
-	// keeps the door open for the shell dialogs and costs nothing when it fails.
+	// Nothing here needs COM today; initialising keeps the door open for the
+	// file dialogs the download settings will need, and costs nothing.
 	_, _, _ = procCoInitializeEx.Call(0, 2) // COINIT_APARTMENTTHREADED
 
+	thread, _, _ := procGetCurrentThreadID.Call()
 	instance, _, _ := procGetModuleHandleW.Call(0)
-	app := &shell{cb: callbacks}
+	app := &tray{cb: callbacks, icon: loadAppIcon()}
 
 	cursor, _, _ := procLoadCursorW.Call(0, idcArrow)
 	class := wndClassExW{
 		cbSize:        uint32(unsafe.Sizeof(wndClassExW{})),
-		lpfnWndProc:   syscall.NewCallback(windowProc),
+		lpfnWndProc:   syscall.NewCallback(trayProc),
 		hInstance:     instance,
-		hIcon:         loadAppIcon(),
+		hIcon:         app.icon,
 		hCursor:       cursor,
-		hbrBackground: 16, // COLOR_BTNFACE + 1, the dialog grey
-		lpszClassName: utf16Ptr(wndClassMainName),
+		lpszClassName: utf16Ptr(wndClassTray),
 	}
 	if _, err := call(procRegisterClassExW, uintptr(unsafe.Pointer(&class))); err != nil {
-		return fmt.Errorf("register the window class: %w", err)
+		return fmt.Errorf("register the tray window: %w", err)
 	}
-	app.icon = class.hIcon
 
-	// A window started at login stays off screen until the tray icon is used: an
-	// unsolicited window on top of somebody's desktop at login is a bug.
-	style := uintptr(wsOverlapped | wsCaption | wsSysMenu | wsMinimizeBox)
-	if !callbacks.StartHidden {
-		style |= wsVisible
-	}
+	// The window is never shown. It exists because the notification area sends
+	// the icon's clicks to a window, and a message loop needs something to pump.
 	hwnd, err := call(procCreateWindowExW,
 		0,
-		uintptr(unsafe.Pointer(utf16Ptr(wndClassMainName))),
+		uintptr(unsafe.Pointer(utf16Ptr(wndClassTray))),
 		uintptr(unsafe.Pointer(utf16Ptr(callbacks.title()))),
-		style,
-		0x80000000, // CW_USEDEFAULT
-		0x80000000,
-		560, 330,
-		0, 0, instance, 0)
+		wsOverlapped,
+		0, 0, 0, 0, 0, 0, instance, 0)
 	if err != nil || hwnd == 0 {
-		return fmt.Errorf("create the window: %v", err)
+		return fmt.Errorf("create the tray window: %v", err)
 	}
 	app.hwnd = hwnd
 	currentMu.Lock()
 	current = app
+	uiThreadID = thread
 	currentMu.Unlock()
 
-	app.createControls(instance)
-	app.setFonts()
-	app.refresh()
-	app.addTrayIcon()
+	if err := app.addIcon(); err != nil {
+		procDestroyWindow.Call(hwnd)
+		currentMu.Lock()
+		current = nil
+		currentMu.Unlock()
+		return err
+	}
 	procSetTimer.Call(hwnd, timerRefresh, refreshIntervalMS, 0)
 
 	var message msg
@@ -347,142 +295,100 @@ func Run(callbacks Callbacks) error {
 		procDispatchMessageW.Call(uintptr(unsafe.Pointer(&message)))
 	}
 
-	app.removeTrayIcon()
+	app.removeIcon()
 	currentMu.Lock()
 	current = nil
+	uiThreadID = 0
 	currentMu.Unlock()
 	return nil
 }
 
-func (s *shell) createControls(instance uintptr) {
-	create := func(class, text string, style uint32, x, y, width, height int32, id uintptr) uintptr {
-		handle, _ := call(procCreateWindowExW,
-			0,
-			uintptr(unsafe.Pointer(utf16Ptr(class))),
-			uintptr(unsafe.Pointer(utf16Ptr(text))),
-			uintptr(wsChild|wsVisible|style),
-			uintptr(x), uintptr(y), uintptr(width), uintptr(height),
-			s.hwnd, id, instance, 0)
-		return handle
-	}
-
-	s.titleLabel = create(classNameStatic, "Teldrive 正在运行", ssLeft, 20, 18, 500, 22, 0)
-	// A read-only edit rather than a label: the address is the one thing on this
-	// window somebody may want to select and paste somewhere else.
-	s.addressEdit = create(classNameEdit, "", esReadOnly|esAutoHScroll|wsBorder, 20, 56, 500, 24, 0)
-	s.networkEdit = create(classNameEdit, "", esReadOnly|esAutoHScroll|wsBorder, 20, 88, 500, 24, 0)
-	s.pendingLabel = create(classNameStatic, "等待批准的设备：0", ssLeft, 20, 122, 500, 20, 0)
-	s.detailLabel = create(classNameStatic, "", ssLeft, 20, 146, 500, 20, 0)
-	s.hintLabel = create(classNameStatic,
-		"关闭窗口只会收进托盘；服务会继续运行，直到你点「退出」。", ssLeft, 20, 174, 500, 20, 0)
-	s.openButton = create(classNameButton, "打开网页", bsPushButton|wsTabStop, 20, 214, 150, 32, idOpenBrowser)
-	s.copyButton = create(classNameButton, "复制地址", bsPushButton|wsTabStop, 186, 214, 150, 32, idCopyAddress)
-	s.quitButton = create(classNameButton, "退出", bsPushButton|wsTabStop, 352, 214, 168, 32, idQuit)
-}
-
-// setFonts gives every control the stock dialog font; without it the window
-// renders in the ancient bitmap system font.
-func (s *shell) setFonts() {
-	font, _, _ := procGetStockObject.Call(defaultGuiObj)
-	if font == 0 {
-		return
-	}
-	for _, control := range []uintptr{
-		s.titleLabel, s.addressEdit, s.networkEdit, s.pendingLabel,
-		s.detailLabel, s.hintLabel, s.openButton, s.copyButton, s.quitButton,
-	} {
-		if control != 0 {
-			procSendMessageW.Call(control, wmSetFont, font, 1)
-		}
+// Stop ends the message loop, the programmatic form of the tray's quit item. A
+// caller that decided to shut down (the server stopped itself, or a test is
+// finished) uses this instead of waiting for a click.
+func Stop() {
+	currentMu.Lock()
+	thread := uiThreadID
+	currentMu.Unlock()
+	if thread != 0 {
+		procPostThreadMessageW.Call(thread, wmQuit, 0, 0)
 	}
 }
 
-// refresh recomputes everything the window shows. It runs on the UI thread and
-// only reads a snapshot the poller prepared, so it never blocks on the network.
-func (s *shell) refresh() {
-	snapshot := Snapshot{}
-	if s.cb.Snapshot != nil {
-		snapshot = s.cb.Snapshot()
-	}
-	address := snapshot.Address
-	if address == "" {
-		address = "正在启动…"
-	}
-	s.setText(s.addressEdit, "本机："+address)
-	network := snapshot.NetworkAddress
-	if network == "" {
-		network = "其他设备：未开启局域网访问"
-	} else {
-		network = "其他设备：" + network
-	}
-	s.setText(s.networkEdit, network)
-	s.setText(s.pendingLabel, fmt.Sprintf("等待批准的设备：%d", snapshot.Pending))
-	s.setText(s.detailLabel, snapshot.Detail)
-	s.lastAddress = snapshot.Address
-	s.updateTooltip(snapshot)
-
-	// A device asking for access is the one event worth interrupting for: the
-	// whole feature is a person deciding, and a request waits only ten minutes.
-	if snapshot.Pending > 0 && !s.notified {
-		s.notified = true
-		s.balloon("有设备请求访问", fmt.Sprintf("%d 台设备正在等待你的批准。", snapshot.Pending))
-	}
-	if snapshot.Pending == 0 {
-		s.notified = false
-	}
-}
-
-func (s *shell) setText(control uintptr, text string) {
-	if control == 0 {
-		return
-	}
-	procSetWindowTextW.Call(control, uintptr(unsafe.Pointer(utf16Ptr(text))))
-}
-
-func (s *shell) controlText(control uintptr) string {
-	buffer := make([]uint16, 1024)
-	length, _, _ := procGetWindowTextW.Call(control, uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
-	if length == 0 {
-		return ""
-	}
-	return syscall.UTF16ToString(buffer[:length])
-}
-
-func (s *shell) addTrayIcon() {
-	data := s.trayData()
+func (t *tray) addIcon() error {
+	data := t.iconData()
 	data.uFlags = nifMessage | nifIcon | nifTip
-	procShellNotifyIconW.Call(nimAdd, uintptr(unsafe.Pointer(&data)))
+	copy(data.szTip[:], syscall.StringToUTF16(truncate(t.tooltip(), maxTooltip)))
+	added, _, _ := procShellNotifyIconW.Call(nimAdd, uintptr(unsafe.Pointer(&data)))
+	if added == 0 {
+		return errors.New("the notification area did not accept the icon")
+	}
+	return nil
 }
 
-func (s *shell) removeTrayIcon() {
-	data := s.trayData()
+func (t *tray) removeIcon() {
+	data := t.iconData()
 	procShellNotifyIconW.Call(nimDelete, uintptr(unsafe.Pointer(&data)))
 }
 
-func (s *shell) trayData() notifyIconDataW {
+func (t *tray) iconData() notifyIconDataW {
 	data := notifyIconDataW{
-		hWnd:             s.hwnd,
+		hWnd:             t.hwnd,
 		uID:              trayIconID,
 		uCallbackMessage: wmAppTray,
-		hIcon:            s.icon,
+		hIcon:            t.icon,
 	}
+	// The size is what tells the shell which version of the structure it was
+	// handed; letting it read past the fields this program fills would be worse.
 	data.cbSize = uint32(unsafe.Sizeof(data))
 	return data
 }
 
-func (s *shell) updateTooltip(snapshot Snapshot) {
-	data := s.trayData()
-	data.uFlags = nifTip
-	tip := fmt.Sprintf("%s · %d 台待批准", s.cb.title(), snapshot.Pending)
-	if snapshot.Address != "" {
-		tip = fmt.Sprintf("%s · %s · %d 台待批准", s.cb.title(), snapshot.Address, snapshot.Pending)
+func (t *tray) status() Status {
+	if t.cb.Status == nil {
+		return Status{}
 	}
-	copy(data.szTip[:], syscall.StringToUTF16(tip))
-	procShellNotifyIconW.Call(nimModify, uintptr(unsafe.Pointer(&data)))
+	return t.cb.Status()
 }
 
-func (s *shell) balloon(title, message string) {
-	data := s.trayData()
+func (t *tray) tooltip() string {
+	snapshot := t.status()
+	tip := t.cb.title()
+	if snapshot.Address != "" {
+		tip += " · " + snapshot.Address
+	}
+	if snapshot.Pending > 0 {
+		tip += fmt.Sprintf(" · %d 台待批准", snapshot.Pending)
+	}
+	if snapshot.Detail != "" && snapshot.Address == "" {
+		tip += " · " + snapshot.Detail
+	}
+	return tip
+}
+
+// refresh keeps the tooltip and the "somebody is waiting" balloon current. It
+// runs on the UI thread and only reads what the poller prepared.
+func (t *tray) refresh() {
+	snapshot := t.status()
+	data := t.iconData()
+	data.uFlags = nifTip
+	copy(data.szTip[:], syscall.StringToUTF16(truncate(t.tooltip(), maxTooltip)))
+	procShellNotifyIconW.Call(nimModify, uintptr(unsafe.Pointer(&data)))
+	t.lastAddress = snapshot.Address
+
+	// A device asking for access is the one event worth interrupting for: the
+	// whole feature is a person deciding, and a request waits only ten minutes.
+	if snapshot.Pending > 0 && !t.notified {
+		t.notified = true
+		t.balloon("有设备请求访问", fmt.Sprintf("%d 台设备正在等待你的批准。", snapshot.Pending))
+	}
+	if snapshot.Pending == 0 {
+		t.notified = false
+	}
+}
+
+func (t *tray) balloon(title, message string) {
+	data := t.iconData()
 	data.uFlags = nifInfo
 	copy(data.szInfoTitle[:], syscall.StringToUTF16(title))
 	copy(data.szInfo[:], syscall.StringToUTF16(message))
@@ -490,117 +396,110 @@ func (s *shell) balloon(title, message string) {
 	procShellNotifyIconW.Call(nimModify, uintptr(unsafe.Pointer(&data)))
 }
 
-func (s *shell) showWindow() {
-	procShowWindow.Call(s.hwnd, swRestore)
-	procSetForegroundWindow.Call(s.hwnd)
-}
-
-// trayMenu is the right-click menu. It is rebuilt each time it is shown, which
-// is cheaper than keeping it in sync with the state it displays.
-func (s *shell) trayMenu() {
+// menu is the right-click menu. It is rebuilt each time it is shown, which is
+// cheaper than keeping it in sync with the state it displays.
+func (t *tray) menu() {
 	menu, _, _ := procCreatePopupMenu.Call()
 	if menu == 0 {
 		return
 	}
 	defer procDestroyMenu.Call(menu)
 
-	appendItem := func(flags uintptr, id uintptr, text string) {
+	appendItem := func(flags, id uintptr, text string) {
 		procAppendMenuW.Call(menu, flags, id, uintptr(unsafe.Pointer(utf16Ptr(text))))
 	}
 	appendItem(mfString, idMenuOpen, "打开网页")
 	appendItem(mfString, idMenuCopy, "复制地址")
-	appendItem(mfString, idMenuShow, "显示窗口")
 	appendItem(mfSeparator, 0, "")
-	appendItem(mfString, idMenuQuit, "退出")
+	appendItem(mfString, idMenuQuit, "退出 Teldrive")
 
 	var cursor point
 	procGetCursorPos.Call(uintptr(unsafe.Pointer(&cursor)))
 	// Without the foreground hand-off the menu stays up after the click that
 	// dismissed it; this is the documented sequence for a tray menu.
-	procSetForegroundWindow.Call(s.hwnd)
+	procSetForegroundWindow.Call(t.hwnd)
 	command, _, _ := procTrackPopupMenu.Call(menu, tpmReturnCmd|tpmRightAlign,
-		uintptr(cursor.x), uintptr(cursor.y), 0, s.hwnd, 0)
-	procPostMessageW.Call(s.hwnd, wmNull, 0, 0)
+		uintptr(cursor.x), uintptr(cursor.y), 0, t.hwnd, 0)
+	procPostMessageW.Call(t.hwnd, wmNull, 0, 0)
 	if command != 0 {
-		s.command(int(command), 0)
+		t.command(int(command))
 	}
 }
 
-func (s *shell) command(id int, _ uintptr) {
+func (t *tray) command(id int) {
 	switch id {
-	case idOpenBrowser, idMenuOpen:
-		s.openBrowser()
-	case idCopyAddress, idMenuCopy:
-		s.copyAddress()
-	case idShowWindow, idMenuShow:
-		s.showWindow()
-	case idQuit, idMenuQuit:
-		s.quit()
+	case idMenuOpen:
+		t.openBrowser()
+	case idMenuCopy:
+		t.copyAddress()
+	case idMenuQuit:
+		t.quit()
 	}
 }
 
-func (s *shell) openBrowser() {
-	if s.cb.OpenBrowser == nil {
+func (t *tray) openBrowser() {
+	if t.cb.OpenBrowser == nil {
 		return
 	}
-	if err := s.cb.OpenBrowser(); err != nil {
-		s.cb.log("open browser failed", "error", err)
+	if err := t.cb.OpenBrowser(); err != nil {
+		t.cb.log("open browser failed", "error", err)
 	}
 }
 
-func (s *shell) copyAddress() {
-	if s.cb.Copy == nil {
+func (t *tray) copyAddress() {
+	if t.cb.Copy == nil {
 		return
 	}
-	address := s.lastAddress
+	address := t.status().Address
+	if address == "" {
+		address = t.lastAddress
+	}
 	if address == "" {
 		return
 	}
-	if err := s.cb.Copy(address); err != nil {
-		s.cb.log("copy address failed", "error", err)
+	if err := t.cb.Copy(address); err != nil {
+		t.cb.log("copy address failed", "error", err)
 	}
 }
 
-func (s *shell) quit() {
-	if s.cb.Quit != nil {
-		s.cb.Quit()
+func (t *tray) quit() {
+	if t.cb.Quit != nil {
+		t.cb.Quit()
 	}
-	procDestroyWindow.Call(s.hwnd)
+	procPostQuitMessage.Call(0)
 }
 
-func windowProc(hwnd, message, wParam, lParam uintptr) uintptr {
+func trayProc(hwnd, message, wParam, lParam uintptr) uintptr {
 	currentMu.Lock()
-	shell := current
+	app := current
 	currentMu.Unlock()
 
 	switch message {
-	case wmCommand:
-		if shell != nil {
-			shell.command(int(wParam&0xffff), (wParam>>16)&0xffff)
-		}
-		return 0
 	case wmTimer:
-		if shell != nil {
-			shell.refresh()
+		if app != nil {
+			app.refresh()
 		}
 		return 0
 	case wmAppTray:
-		if shell != nil {
+		if app != nil {
 			switch uint32(lParam) {
 			case wmLButtonUp, wmLButtonDbl:
-				shell.showWindow()
+				// A double-click is the same gesture as double-clicking the
+				// program: the drive is the page, so open it.
+				app.openBrowser()
 			case wmRButtonUp:
-				shell.trayMenu()
+				app.menu()
 			}
 		}
 		return 0
 	case wmClose:
-		// Closing the window hides it: the drive keeps running, and the tray
-		// icon is how it comes back. Quitting is the button that says so.
-		procShowWindow.Call(hwnd, swHide)
+		if app != nil {
+			app.quit()
+		} else {
+			procDestroyWindow.Call(hwnd)
+		}
 		return 0
 	case wmDestroy:
-		procKillTimer.Call(hwnd, timerRefresh)
 		procPostQuitMessage.Call(0)
 		return 0
 	}
@@ -608,8 +507,7 @@ func windowProc(hwnd, message, wParam, lParam uintptr) uintptr {
 	return result
 }
 
-// Message shows a modal information box. It may be called before the shell
-// exists, which is why it does not need the window.
+// Message shows a modal information box.
 func Message(title, message string) {
 	procMessageBoxW.Call(0,
 		uintptr(unsafe.Pointer(utf16Ptr(message))),
@@ -628,7 +526,7 @@ func Error(title, message string) {
 // Prompt asks for one line of text, masked when secret, and returns ok=false
 // when the user cancels or closes the box. It runs its own modal message loop,
 // so it must be called from the goroutine that owns the main thread and before
-// (or after) the main window's own loop.
+// the tray's own loop.
 func Prompt(title, message string, secret bool) (string, bool) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -640,13 +538,13 @@ func Prompt(title, message string, secret bool) (string, bool) {
 		lpfnWndProc:   syscall.NewCallback(promptProc),
 		hInstance:     instance,
 		hCursor:       cursor,
-		hbrBackground: 16,
+		hbrBackground: 16, // COLOR_BTNFACE + 1, the dialog grey
 		lpszClassName: utf16Ptr(wndClassPrompt),
 	}
 	_, _ = call(procRegisterClassExW, uintptr(unsafe.Pointer(&class)))
 
 	dialog, err := call(procCreateWindowExW,
-		0x00000008, // WS_EX_TOPMOST: the passphrase must not end up behind a browser
+		0x00000008, // WS_EX_TOPMOST: the prompt must not end up behind a browser
 		uintptr(unsafe.Pointer(utf16Ptr(wndClassPrompt))),
 		uintptr(unsafe.Pointer(utf16Ptr(title))),
 		wsOverlapped|wsCaption|wsSysMenu|wsVisible,
@@ -680,7 +578,9 @@ func Prompt(title, message string, secret bool) (string, bool) {
 
 	font, _, _ := procGetStockObject.Call(defaultGuiObj)
 	for _, control := range []uintptr{label, edit, ok, cancel} {
-		procSendMessageW.Call(control, wmSetFont, font, 1)
+		if control != 0 && font != 0 {
+			procSendMessageW.Call(control, wmSetFont, font, 1)
+		}
 	}
 	procSetForegroundWindow.Call(dialog)
 
@@ -708,8 +608,7 @@ func Prompt(title, message string, secret bool) (string, bool) {
 func promptProc(hwnd, message, wParam, lParam uintptr) uintptr {
 	switch message {
 	case wmCommand:
-		id := int(wParam & 0xffff)
-		switch id {
+		switch int(wParam & 0xffff) {
 		case promptOKID:
 			buffer := make([]uint16, 512)
 			length, _, _ := procGetWindowTextW.Call(childHandle(hwnd, promptInputID),
@@ -739,7 +638,7 @@ func childHandle(parent uintptr, id uintptr) uintptr {
 	return handle
 }
 
-// Copy puts text on the clipboard, replacing whatever was there.
+// CopyToClipboard puts text on the clipboard, replacing whatever was there.
 func CopyToClipboard(text string) error {
 	if text == "" {
 		return errors.New("nothing to copy")
@@ -795,8 +694,8 @@ func loadAppIcon() uintptr {
 		if width == 0 {
 			width = 256
 		}
-		// The tray draws at 16 pixels; the smallest image that is not smaller
-		// than that is the sharpest one to hand it.
+		// The notification area draws at 16 pixels; the smallest image that is
+		// not smaller than that is the sharpest one to hand it.
 		if width >= 16 && (bestSize == 0 || width < bestSize) {
 			best, bestSize = index, width
 		}
@@ -820,4 +719,12 @@ func loadAppIcon() uintptr {
 		return fallback
 	}
 	return handle
+}
+
+func truncate(text string, limit int) string {
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit])
 }
