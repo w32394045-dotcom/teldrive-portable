@@ -16,9 +16,22 @@ const API_BASE_URL = "/api";
  * the generated client and hand-written `apiFetch` calls alike -- including the
  * login that issues the cookies, which is the one that actually needs the
  * preference. Explicit caller-supplied values win.
+ *
+ * The generated client does not call `fetch` with a plain init: it builds a
+ * `Request` (with `Content-Type`, `Idempotency-Key` and every other header the
+ * contract defines) and passes that plus no init at all. Any init given to
+ * `fetch` replaces the request's headers wholesale, so the request's own headers
+ * have to be copied over before ours are added -- otherwise every generated call
+ * would go out with no `Content-Type` and no `Idempotency-Key`, and the server
+ * would reject it as malformed.
  */
-function withCredentials(init?: RequestInit): RequestInit {
+function withCredentials(input: RequestInfo | URL, init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers);
+  if (input instanceof Request) {
+    input.headers.forEach((value, name) => {
+      if (!headers.has(name)) headers.set(name, value);
+    });
+  }
   const key = readApiKey();
   if (key && !headers.has("X-Api-Key")) headers.set("X-Api-Key", key);
   // An approved device carries its own credential, which the server turns into
@@ -33,7 +46,7 @@ function withCredentials(init?: RequestInit): RequestInit {
 async function fetchWithApiErrors(input: RequestInfo | URL, init?: RequestInit) {
   let response: Response;
   try {
-    response = await fetch(input, withCredentials(init));
+    response = await fetch(input, withCredentials(input, init));
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw normalizeApiError(error);

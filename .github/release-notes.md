@@ -1,6 +1,12 @@
-# Teldrive Portable — Windows 便携包
+# Teldrive Portable v2.5.1 — 登录修复
 
 解压即用：自带 PostgreSQL 和网页界面，不需要装 Go / Node / PostgreSQL，也不需要管理员权限。
+
+## 这一版修了什么
+
+**v2.5.0 在浏览器里点「发送验证码」会报 `request is invalid: Idempotency-Key: field required`，完全无法登录。** 这是网页客户端的一个 bug，不是账号或 Telegram 的问题，也不影响已经登录过的机器。
+
+原因：`openapi-fetch` 先把请求组装成一个 `Request`（`Content-Type`、`Idempotency-Key` 等契约头都在这个对象上），再交给我们的 fetch 包装函数；包装函数为了附加「保持登录」等请求头，用新建的 `Headers` 覆盖了原请求，结果把 `Content-Type` 和 `Idempotency-Key` 一起丢了，服务端按契约拒绝。现在包装函数会先复制原请求的全部请求头再追加自己的，登录、验证码、二步验证、以及所有需要 `Idempotency-Key` 的写操作都恢复正常；并新增了一条回归测试，直接断言生成请求保留 `Content-Type` 与合法的 `Idempotency-Key`，防止再悄悄退化。
 
 ## 下载后怎么用
 
@@ -8,13 +14,15 @@
 2. 双击 **`teldrive-gui.exe`**；
 3. 首次启动约 1 分钟初始化数据库，之后约 5 秒；网页界面会以应用窗口自动打开。
 
+已经解压过 2.5.0 的话，只需用新包里的 `teldrive.exe` / `teldrive-gui.exe` 覆盖旧的同名文件，`data/` 目录和里面的登录状态、设置都保留。
+
 之后程序待在右下角托盘：左键重开界面，右键可「打开界面 / 复制地址 / 退出 Teldrive」。退出时内置数据库会一起停掉。
 
 `teldrive-gui.exe` 没有控制台，诊断信息在 `data/teldrive-gui.log`。想用控制台入口：`teldrive.exe run -c config.toml`（`check` / `version` 也可用）。
 
-## 这一版有什么
+## 包里还有什么
 
-- **原生壳 `teldrive-gui.exe`**：双击打开网页界面的应用窗口（用系统浏览器的应用模式，不是 WebView 套壳），后台只留托盘；有设备申请访问时弹气泡；开机自启时静默进托盘，不弹窗、不打开浏览器。
+- **原生壳 `teldrive-gui.exe`**：双击打开网页界面的应用窗口（系统浏览器的应用模式，不是 WebView 套壳），后台只留托盘；有设备申请访问时弹气泡；开机自启时静默进托盘，不弹窗、不打开浏览器。
 - **局域网伴侣访问**：同一网络里的手机/平板打开地址即可申请，电脑端逐台批准后借用电脑的登录状态；可随时撤销，待批准列表实时可见。
 - **设置加密**：signing-key / data-key / 数据库地址 / 加密密钥用 **AES-256-GCM + PBKDF2(SHA-256, 60 万次)** 封在本地；口令可自设或随机生成（14–25 位），默认记住、也可改成每次启动手填。
 - **备份与恢复**：快照可选密码加密（同参数），内容可勾选（用户 / 加密密钥，金库密钥随包带走）；恢复是手动按钮 + 输入确认，支持覆盖或合并。

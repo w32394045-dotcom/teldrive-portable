@@ -661,6 +661,48 @@ test("Telegram login surface renders independently", async ({ page }) => {
   await expect(page.getByText("QR code", { exact: true })).toBeVisible();
 });
 
+/**
+ * The generated client does not call fetch(url, init): it builds a Request with
+ * Content-Type, Idempotency-Key and every other header the contract defines, and
+ * hands that Request over. A fetch wrapper that rebuilds headers from its own
+ * init replaces the Request's headers wholesale, so every generated call leaves
+ * without its contract headers and the server rejects it as malformed -- the
+ * Telegram login is the first thing anybody notices. This test fails on that
+ * regression rather than on a user's login attempt.
+ */
+test("generated requests keep their contract headers", async ({ page }) => {
+  await page.route("**/api/v1/me", (route) =>
+    route.fulfill({
+      status: 401,
+      json: { error: { code: "unauthorized", message: "Authentication required" } },
+    }),
+  );
+
+  let startHeaders: Record<string, string> = {};
+  await page.route("**/api/v1/auth/telegram/start", async (route) => {
+    startHeaders = route.request().headers();
+    await route.fulfill({
+      status: 201,
+      json: {
+        flowId: "44444444-4444-4444-8444-444444444444",
+        expiresAt: "2026-07-22T12:10:00Z",
+        passwordRequired: false,
+      },
+    });
+  });
+
+  await page.goto("/login");
+  await page.getByRole("tab", { name: "Phone" }).click();
+  await page.getByPlaceholder("+8613800138000").fill("+15555550100");
+  await page.getByRole("button", { name: "Send code" }).click();
+
+  await expect.poll(() => startHeaders["idempotency-key"]).toBeTruthy();
+  expect(startHeaders["content-type"]).toContain("application/json");
+  expect(startHeaders["idempotency-key"]).toMatch(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  );
+});
+
 test("React Aria drop zone and file trigger complete an upload", async ({ page, isMobile }) => {
   test.skip(isMobile, "desktop upload interaction");
   await page.goto("/files");
