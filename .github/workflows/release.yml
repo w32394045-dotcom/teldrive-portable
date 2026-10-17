@@ -1,11 +1,11 @@
 name: build-windows-bundle
 
-# 在 GitHub 的 Windows runner 上从源码编译并打包一键运行包。
+# 在 GitHub 的 Windows runner 上从源码编译 Teldrive Portable 并打包。
 # 产物里 config.toml 用占位符密钥，用户首次启动时自动生成自己的随机密钥，
 # 因此这个公开包不含任何人的真实 signing-key / data-key。
 #
 # 触发方式：
-#   * push 一个 v* tag  -> 构建 + 创建 Release 并附上 zip
+#   * push 一个 v* tag  -> 构建 + 创建 Release（说明取自 .github/release-notes.md）并附上 zip
 #   * Actions 页面手动运行 -> 只构建，产物在 Artifacts 里
 
 on:
@@ -115,11 +115,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           $tag = $env:GITHUB_REF_NAME
-          $notes = "CI 在 windows-latest 上从源码构建的 Windows 一键运行包。解压后双击 teldrive.exe（包里唯一的入口，没有 .bat 脚本）：首次启动会自动生成随机密钥、初始化内置 PostgreSQL，并在端口就绪后打开浏览器；退出时会自己停掉内置数据库。详见仓库 README。"
+          $notes = Join-Path $env:GITHUB_WORKSPACE ".github/release-notes.md"
           Write-Host "publishing $tag (asset $env:ZIP)"
           gh release view $tag --json tagName --jq .tagName 2>&1 | Out-Host
           if ($LASTEXITCODE -ne 0) {
-            gh release create $tag --title "teldrive 一键运行包 $tag" --notes $notes
+            if (Test-Path $notes) {
+              gh release create $tag --title "Teldrive Portable $tag" --notes-file $notes
+            } else {
+              gh release create $tag --title "Teldrive Portable $tag" --generate-notes
+            }
             if ($LASTEXITCODE -ne 0) { Write-Error "gh release create failed ($LASTEXITCODE)"; exit 1 }
           }
           gh release upload $tag $env:ZIP --clobber

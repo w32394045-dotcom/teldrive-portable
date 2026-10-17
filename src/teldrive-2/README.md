@@ -1,3 +1,7 @@
+> **这是上游 teldrive 的原始说明，随源码一起保留。**
+> 本仓库（Teldrive Portable）自己的说明在根目录 [README.md](../../README.md)，
+> 两者的关系与改动范围也写在那里。
+
 # Teldrive
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/tgdrive/teldrive)
 
